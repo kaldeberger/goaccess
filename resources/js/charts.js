@@ -52,28 +52,19 @@ d3.select(document).on('keydown.map-fullscreen', function(event) {
 	if (!control.empty()) control.node().click();
 });
 
-// This is faster than calculating the exact length of each label.
-// e.g., getComputedTextLength(), slice()...
+// Truncate SVG text labels gracefully
 function truncate(text, width) {
 	text.each(function () {
-		var parent = this.parentNode, $d3parent = d3.select(parent);
-		var gw = $d3parent.node().getBBox();
-		var x = (Math.min(gw.width, width) / 2) * -1;
-		// adjust wrapper <svg> width
-		if ('svg' == parent.nodeName) {
-			$d3parent.attr('width', width).attr('x', x);
-		}
-		// wrap <text> within an svg
-		else {
-			$d3parent.insert('svg', function () {
-				return this;
-			}.bind(this))
-			.attr('class', 'wrap-text')
-			.attr('width', width)
-			.attr('x', x)
-			.append(function () {
-				return this;
-			}.bind(this));
+		var self = d3.select(this);
+		if (!self.node() || !self.node().getComputedTextLength) return;
+		var textLength = self.node().getComputedTextLength();
+		var str = self.text();
+		if (textLength > width && str.length > 3) {
+			while (textLength > width && str.length > 0) {
+				str = str.slice(0, -1);
+				self.text(str + '…');
+				textLength = self.node().getComputedTextLength();
+			}
 		}
 	});
 }
@@ -875,6 +866,11 @@ function AreaChart(dualYaxis) {
 
 	var xAxis = d3.axisBottom(xScale)
 		.tickFormat(function(d) {
+			if (format.x === 'date' && typeof d === 'string' && d.length >= 8) {
+				var y = d.substr(0,4), m = parseInt(d.substr(4,2), 10) - 1, day = d.substr(6,2);
+				var date = new Date(y, m, day);
+				return ('0' + date.getDate()).slice(-2) + ' ' + (GoAccess.Util.months[date.getMonth()] || '');
+			}
 			if (format.x)
 				return GoAccess.Util.fmtValue(d, format.x);
 			return d;
@@ -1100,6 +1096,25 @@ function AreaChart(dualYaxis) {
 	}
 
 	function createSkeleton(svg) {
+		// SVG Defs with Linear Gradients
+		var defs = svg.select('defs');
+		if (defs.empty()) {
+			defs = svg.append('defs');
+			var grad0 = defs.append('linearGradient')
+				.attr('id', 'chart-gradient-y0')
+				.attr('x1', '0%').attr('y1', '0%')
+				.attr('x2', '0%').attr('y2', '100%');
+			grad0.append('stop').attr('offset', '0%').attr('stop-color', 'var(--chart-area-0)').attr('stop-opacity', 0.5);
+			grad0.append('stop').attr('offset', '100%').attr('stop-color', 'var(--chart-area-0)').attr('stop-opacity', 0.02);
+
+			var grad1 = defs.append('linearGradient')
+				.attr('id', 'chart-gradient-y1')
+				.attr('x1', '0%').attr('y1', '0%')
+				.attr('x2', '0%').attr('y2', '100%');
+			grad1.append('stop').attr('offset', '0%').attr('stop-color', 'var(--chart-area-1)').attr('stop-opacity', 0.5);
+			grad1.append('stop').attr('offset', '100%').attr('stop-color', 'var(--chart-area-1)').attr('stop-opacity', 0.02);
+		}
+
 		const g = svg.append('g');
 
 		// Lines
@@ -1342,7 +1357,9 @@ function AreaChart(dualYaxis) {
 		var rectsEnter = rects.enter()
 			.append('svg:rect')
 			.attr('height', innerH())
-			.attr('class', 'point');
+			.attr('class', 'chart-overlay-rect')
+			.attr('fill', 'transparent')
+			.attr('pointer-events', 'all');
 
 		rectsEnter.merge(rects)
 			.attr('width', w)
@@ -1484,6 +1501,11 @@ function BarChart(dualYaxis) {
 
 	var xAxis = d3.axisBottom(xScale)
 		.tickFormat(function (d) {
+			if (format.x === 'date' && typeof d === 'string' && d.length >= 8) {
+				var y = d.substr(0,4), m = parseInt(d.substr(4,2), 10) - 1, day = d.substr(6,2);
+				var date = new Date(y, m, day);
+				return ('0' + date.getDate()).slice(-2) + ' ' + (GoAccess.Util.months[date.getMonth()] || '');
+			}
 			if (format.x)
 				return GoAccess.Util.fmtValue(d, format.x);
 			return d;
@@ -1733,6 +1755,8 @@ function BarChart(dualYaxis) {
 		bars.merge(enter)
 			.attr('width', xScale.bandwidth() / 2)
 			.attr('x', function (d) { return xScale(d[0]); })
+			.attr('rx', Math.min(3, xScale.bandwidth() / 4))
+			.attr('ry', Math.min(3, xScale.bandwidth() / 4))
 			.transition()
 			.delay(function (d, i) { return i / data.length * 1000; })
 			.duration(500)
@@ -1757,6 +1781,8 @@ function BarChart(dualYaxis) {
 		bars.merge(enter)
 			.attr('width', xScale.bandwidth() / 2)
 			.attr('x', function (d) { return (xScale(d[0]) + xScale.bandwidth() / 2); })
+			.attr('rx', Math.min(3, xScale.bandwidth() / 4))
+			.attr('ry', Math.min(3, xScale.bandwidth() / 4))
 			.transition()
 			.delay(function (d, i) { return i / data.length * 1000; })
 			.duration(500)
@@ -1851,7 +1877,9 @@ function BarChart(dualYaxis) {
 		var rectsEnter = rects.enter()
 			.append('svg:rect')
 			.attr('height', innerH())
-			.attr('class', 'point');
+			.attr('class', 'chart-overlay-rect')
+			.attr('fill', 'transparent')
+			.attr('pointer-events', 'all');
 
 		rectsEnter.merge(rects)
 			.attr('width', w)
