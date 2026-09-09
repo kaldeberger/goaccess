@@ -5,6 +5,7 @@
       <span class="overall-date-range text-muted">{{#from}}{{from}}{{/from}}{{^from}}<span class="overall-date-empty">No dated requests in this report</span>{{/from}}{{#to}} &ndash; {{to}}{{/to}}</span>
     </div>
     <p class="overall-meta text-muted" aria-live="polite">{{#meta}}{{{meta}}}{{/meta}}</p>
+    {{#coverage}}<p class="overall-coverage text-muted" role="note">{{{coverage}}}</p>{{/coverage}}
     <div class="key-insights" aria-label="Key insights">
       <h3 class="key-insights-title">Key insights</h3>
       <ul role="list" class="key-insights-grid">{{#insights}}<li class="insight-card insight-{{tone}}"><span class="insight-label">{{label}}</span><span class="insight-value">{{{value}}}</span>{{#sub}}<span class="insight-sub">{{{sub}}}</span>{{/sub}}</li>{{/insights}}{{^insights}}<li class="insight-card insight-muted"><span class="insight-label">No insights</span><span class="insight-value">Not enough data in this report</span></li>{{/insights}}</ul>
@@ -125,12 +126,12 @@
 <!-- TPL Table thead -->
 <script id="tpl-table-thead" type="text/template">
 	{{#hasSubItems}}
-		<th></th>
+		<th scope="col"><span class="sr-only">Expand</span></th>
 	{{/hasSubItems}}
-		<th>#</th>
+		<th scope="col">#</th>
 	{{#items}}
-		<th class="{{dataType}} {{#key}}sortable{{/key}} {{#sort}}sorted-col{{/sort}}" data-key="{{key}}" {{#sort}}data-order="{{#asc}}asc{{/asc}}{{^asc}}desc{{/asc}}"{{/sort}}>
-			{{label}} <i class="fa fa-{{^sort}}sort{{/sort}}{{#sort}}{{#asc}}caret-up{{/asc}}{{^asc}}caret-down{{/asc}}{{/sort}}"></i>
+		<th scope="col" class="{{dataType}} {{#key}}sortable{{/key}} {{#sort}}sorted-col{{/sort}}" data-key="{{key}}" {{#key}}tabindex="0" role="columnheader" aria-sort="{{#sort}}{{#asc}}ascending{{/asc}}{{^asc}}descending{{/asc}}{{/sort}}{{^sort}}none{{/sort}}"{{/key}} {{#sort}}data-order="{{#asc}}asc{{/asc}}{{^asc}}desc{{/asc}}"{{/sort}}>
+			{{label}} <i class="fa fa-{{^sort}}sort{{/sort}}{{#sort}}{{#asc}}caret-up{{/asc}}{{^asc}}caret-down{{/asc}}{{/sort}}" aria-hidden="true"></i>
 		</th>
 	{{/items}}
 </script>
@@ -188,7 +189,7 @@
 				<div class="panel-search-box" data-panel="{{id}}">
 					<i class="fa fa-search panel-search-icon" aria-hidden="true"></i>
 					<input type="text" class="panel-search-input" data-panel="{{id}}" placeholder="Filter {{head}}..." aria-label="Filter {{head}}">
-					<span class="panel-search-badge" data-panel="{{id}}" style="display: none;"></span>
+					<span class="panel-search-badge" data-panel="{{id}}" style="display: none;" role="status" aria-live="polite"></span>
 					<button type="button" class="panel-search-clear" data-panel="{{id}}" style="display: none;" aria-label="Clear filter">&times;</button>
 				</div>
 				<button class="btn btn-default btn-sm panel-focus-btn" type="button" data-panel="{{id}}" title="Toggle Fullscreen Focus" aria-label="Toggle Fullscreen Focus">
@@ -230,25 +231,26 @@
 			</div>
 
 			<div class="panel-footer-controls">
+				<span class="pagination-status text-muted" data-panel="{{id}}" aria-live="polite"></span>
 				<ul class="pagination pagination-sm">
 					<li class="disabled">
-						<a class="panel-first" href="javascript:void(0);" aria-label="{{labels.first}}" data-panel="{{id}}" title="{{labels.first}}">
-							<i class="fa fa-angle-double-left"></i>
+						<a class="panel-first" href="javascript:void(0);" aria-label="{{labels.first}}" aria-disabled="true" data-panel="{{id}}" title="{{labels.first}}">
+							<i class="fa fa-angle-double-left" aria-hidden="true"></i>
 						</a>
 					</li>
 					<li class="disabled">
-						<a class="panel-prev" href="javascript:void(0);" aria-label="{{labels.previous}}" data-panel="{{id}}" title="{{labels.previous}}">
-							<i class="fa fa-angle-left"></i>
+						<a class="panel-prev" href="javascript:void(0);" aria-label="{{labels.previous}}" aria-disabled="true" data-panel="{{id}}" title="{{labels.previous}}">
+							<i class="fa fa-angle-left" aria-hidden="true"></i>
 						</a>
 					</li>
 					<li>
-						<a class="panel-next" href="javascript:void(0);" aria-label="{{labels.next}}" data-panel="{{id}}" title="{{labels.next}}">
-							<i class="fa fa-angle-right"></i>
+						<a class="panel-next" href="javascript:void(0);" aria-label="{{labels.next}}" aria-disabled="false" data-panel="{{id}}" title="{{labels.next}}">
+							<i class="fa fa-angle-right" aria-hidden="true"></i>
 						</a>
 					</li>
 					<li>
-						<a class="panel-last" href="javascript:void(0);" aria-label="{{labels.last}}" data-panel="{{id}}" title="{{labels.last}}">
-							<i class="fa fa-angle-double-right"></i>
+						<a class="panel-last" href="javascript:void(0);" aria-label="{{labels.last}}" aria-disabled="false" data-panel="{{id}}" title="{{labels.last}}">
+							<i class="fa fa-angle-double-right" aria-hidden="true"></i>
 						</a>
 					</li>
 				</ul>

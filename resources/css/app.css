@@ -287,6 +287,13 @@ body {
 	color: var(--text-muted);
 }
 
+.overall-coverage {
+	font-size: 12px;
+	margin: -0.25rem 0 0.75rem;
+	color: var(--text-muted);
+	font-style: italic;
+}
+
 /* Key insights strip (frontend-only summary of existing panels). */
 .key-insights {
 	margin-bottom: 1rem;
@@ -705,6 +712,11 @@ article table th.sortable:hover {
 	color: var(--accent-primary);
 }
 
+article table th.sortable:focus-visible {
+	outline: 2px solid var(--accent-primary) !important;
+	outline-offset: -2px !important;
+}
+
 article table th.sortable.sorted-col {
 	color: var(--accent-primary) !important;
 	border-bottom: 2px solid var(--accent-primary) !important;
@@ -862,9 +874,27 @@ article table .cell-hl.b4 { color: #f43f5e !important; }
 /* Pagination Controls */
 .panel-footer-controls {
 	display: flex;
-	justify-content: flex-end;
+	justify-content: space-between;
 	align-items: center;
+	gap: 12px;
 	margin-top: 12px;
+}
+
+.pagination-status {
+	font-size: 12px;
+	font-variant-numeric: tabular-nums;
+}
+
+.sr-only {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	padding: 0;
+	margin: -1px;
+	overflow: hidden;
+	clip: rect(0, 0, 0, 0);
+	white-space: nowrap;
+	border: 0;
 }
 
 .pagination {

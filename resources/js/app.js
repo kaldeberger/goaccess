@@ -880,6 +880,26 @@ GoAccess.Insights = {
 		});
 		return out.slice(0, this.maxRows);
 	},
+
+	// Log-format coverage: which optional fields actually produced data.
+	// Shown as a muted banner so legacy logs explain degraded insights.
+	coverage: function () {
+		var parts = [];
+		var vhosts = GoAccess.getPanelData('vhosts');
+		vhosts = vhosts && vhosts.data ? vhosts.data : [];
+		var hasVhost = vhosts.some(function (r) { return String(r.data) !== 'UNKNOWN'; });
+		parts.push({key: 'vhost (%v)', ok: hasVhost});
+		var req = GoAccess.getPanelData('requests');
+		req = req && req.data ? req.data : [];
+		var hasTiming = req.some(function (r) { return GoAccess.Insights.num(r.avgts) > 0 || GoAccess.Insights.num(r.cumts) > 0; });
+		parts.push({key: 'timing (%T)', ok: hasTiming});
+		var hasBytes = req.some(function (r) { return GoAccess.Insights.num(r.bytes) > 0; });
+		parts.push({key: 'bytes (%b)', ok: hasBytes});
+		var br = GoAccess.getPanelData('browsers');
+		br = br && br.data ? br.data : [];
+		parts.push({key: 'agent (%u)', ok: br.length > 0});
+		return parts;
+	},
 };
 
 // OVERALL STATS
@@ -942,6 +962,7 @@ GoAccess.OverallStats = {
 			'to': data.end_date,
 			'meta': this.renderMeta(data),
 			'insights': GoAccess.Insights.build(data),
+			'coverage': this.renderCoverage(),
 		}));
 		$('#overall').setAttribute('aria-labelledby', 'overall-heading');
 
@@ -963,6 +984,14 @@ GoAccess.OverallStats = {
 		if (data.log_size != null) bits.push('Log size: ' + GoAccess.Util.fmtValue(data.log_size, 'bytes'));
 		if (data.generation_time != null) bits.push('Parsed in ' + GoAccess.Util.fmtValue(data.generation_time, 'secs'));
 		return bits.join(' &middot; ');
+	},
+
+	// Coverage banner: which optional log fields produced data.
+	renderCoverage: function () {
+		var parts = GoAccess.Insights.coverage();
+		var missing = parts.filter(function (p) { return !p.ok; });
+		if (!missing.length) return '';
+		return 'Limited log fields: no ' + missing.map(function (p) { return GoAccess.Util.escapeHTML(p.key); }).join(', ') + ' data &mdash; related insights hidden, rows preserved.';
 	},
 
 	// Render general/overall analyzed requests.
@@ -1761,50 +1790,66 @@ GoAccess.Panels = {
 
 	enablePrev: function (panel) {
 		var $pagination = $('#panel-' + panel + ' .pagination a.panel-prev');
-		if ($pagination)
+		if ($pagination) {
 			$pagination.parentNode.classList.remove('disabled');
+			$pagination.setAttribute('aria-disabled', 'false');
+		}
 	},
 
 	disablePrev: function (panel) {
 		var $pagination = $('#panel-' + panel + ' .pagination a.panel-prev');
-		if ($pagination)
+		if ($pagination) {
 			$pagination.parentNode.classList.add('disabled');
+			$pagination.setAttribute('aria-disabled', 'true');
+		}
 	},
 
 	enableNext: function (panel) {
 		var $pagination = $('#panel-' + panel + ' .pagination a.panel-next');
-		if ($pagination)
+		if ($pagination) {
 			$pagination.parentNode.classList.remove('disabled');
+			$pagination.setAttribute('aria-disabled', 'false');
+		}
 	},
 
 	disableNext: function (panel) {
 		var $pagination = $('#panel-' + panel + ' .pagination a.panel-next');
-		if ($pagination)
+		if ($pagination) {
 			$pagination.parentNode.classList.add('disabled');
+			$pagination.setAttribute('aria-disabled', 'true');
+		}
 	},
 
 	enableFirst: function (panel) {
 		var $pagination = $('#panel-' + panel + ' .pagination a.panel-first');
-		if ($pagination)
+		if ($pagination) {
 			$pagination.parentNode.classList.remove('disabled');
+			$pagination.setAttribute('aria-disabled', 'false');
+		}
 	},
 
 	disableFirst: function (panel) {
 		var $pagination = $('#panel-' + panel + ' .pagination a.panel-first');
-		if ($pagination)
+		if ($pagination) {
 			$pagination.parentNode.classList.add('disabled');
+			$pagination.setAttribute('aria-disabled', 'true');
+		}
 	},
 
 	enableLast: function (panel) {
 		var $pagination = $('#panel-' + panel + ' .pagination a.panel-last');
-		if ($pagination)
+		if ($pagination) {
 			$pagination.parentNode.classList.remove('disabled');
+			$pagination.setAttribute('aria-disabled', 'false');
+		}
 	},
 
 	disableLast: function (panel) {
 		var $pagination = $('#panel-' + panel + ' .pagination a.panel-last');
-		if ($pagination)
+		if ($pagination) {
 			$pagination.parentNode.classList.add('disabled');
+			$pagination.setAttribute('aria-disabled', 'true');
+		}
 	},
 
 	enablePagination: function (panel) {
@@ -2360,6 +2405,12 @@ GoAccess.Tables = {
 			item.onclick = function (e) {
 				this.sortColumn(e.currentTarget);
 			}.bind(this);
+			item.onkeydown = function (e) {
+				if (e.key === 'Enter' || e.key === ' ') {
+					if (e.preventDefault) e.preventDefault();
+					this.sortColumn(e.currentTarget);
+				}
+			}.bind(this);
 		}.bind(this));
 
 		$$('.btn-copy', function (item) {
@@ -2752,7 +2803,7 @@ GoAccess.Tables = {
 		level = level || 0; /* no data rows */
 		if (dataItems.length === 0 && ui.items.length) {
 			var query = (GoAccess.AppState[panel] && GoAccess.AppState[panel].searchQuery) ? GoAccess.AppState[panel].searchQuery : '';
-			var emptyMsg = query ? 'No results matching "' + query + '"' : 'No data on this panel.';
+			var emptyMsg = query ? 'No results matching "' + query + '".' : 'No data on this panel.';
 			rows.push({
 				cells: [{
 					className: 'text-center',
@@ -2806,7 +2857,7 @@ GoAccess.Tables = {
 		var rows = [];
 		this.renderRows(rows, panel, ui, dataItems);
 		if (rows.length == 0) {
-			table.innerHTML = '<tr class="table-empty-row"><td colspan="20" class="text-center text-muted" style="padding: 28px 12px;"><i class="fa fa-search" style="margin-right: 6px; opacity: 0.5;"></i>No matching records found</td></tr>';
+			table.innerHTML = '<tr class="table-empty-row"><td colspan="20" class="text-center text-muted" style="padding: 28px 12px;"><i class="fa fa-search" style="margin-right: 6px; opacity: 0.5;" aria-hidden="true"></i>No data on this panel.</td></tr>';
 			return;
 		}
 
@@ -2818,6 +2869,7 @@ GoAccess.Tables = {
 	togglePagination: function (panel, page, dataItems) {
 		GoAccess.Panels.enablePagination(panel);
 		var total = this.getTotalPages(dataItems);
+		this.renderPaginationStatus(panel, page, dataItems, total);
 		if (total <= 1) {
 			GoAccess.Panels.disablePagination(panel);
 			return;
@@ -2831,6 +2883,21 @@ GoAccess.Tables = {
 			GoAccess.Panels.disablePrev(panel);
 			GoAccess.Panels.disableFirst(panel);
 		}
+	},
+
+	renderPaginationStatus: function (panel, page, dataItems, total) {
+		var el = document.querySelector('.pagination-status[data-panel="' + panel + '"]');
+		if (!el) return;
+		var perPage = GoAccess.getPrefs().perPage || 7;
+		var count = (dataItems || []).length;
+		page = Math.max(1, Math.min(page || 1, total || 1));
+		if (!count || !total || total <= 1) {
+			el.textContent = '';
+			return;
+		}
+		var start = (page - 1) * perPage + 1;
+		var end = Math.min(page * perPage, count);
+		el.textContent = 'Showing ' + start + '–' + end + ' of ' + count;
 	},
 
 	renderTable: function (panel, page) {
