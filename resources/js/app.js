@@ -744,7 +744,7 @@ GoAccess.Toast = {
 // status_codes/not_found + browsers + vhosts/visit_time. Every insight
 // degrades to null when its source panel/field is absent.
 GoAccess.Insights = {
-	maxRows: 6,
+	maxRows: 8,
 
 	num: function (v) {
 		var n = GoAccess.Util.getCount(v);
@@ -769,6 +769,7 @@ GoAccess.Insights = {
 
 	fmtURL: function (url, max) {
 		url = String(url == null ? '' : url);
+		if (!url.trim()) url = '(root / empty)';
 		max = max || 60;
 		var short = url.length > max ? url.slice(0, max - 1) + '…' : url;
 		return this.esc(short);
@@ -785,6 +786,39 @@ GoAccess.Insights = {
 			value: this.fmtURL(top.data) + ' · ' + GoAccess.Util.fmtValue(this.num(top.avgts), 'utime'),
 			sub: this.num(top.hits).toLocaleString() + ' hits · max ' + GoAccess.Util.fmtValue(this.num(top.maxts), 'utime'),
 			tone: this.num(top.avgts) >= 1E6 ? 'warn' : '',
+		};
+	},
+
+	latencyHealth: function () {
+		var rows = GoAccess.getPanelData('requests');
+		rows = rows && rows.data ? rows.data : [];
+		var timed = rows.filter(function (r) { return GoAccess.Insights.num(r.avgts) > 0; });
+		if (!timed.length) return null;
+		var total = 0, sat = 0, tol = 0, frust = 0;
+		timed.forEach(function (r) {
+			var h = GoAccess.Insights.num(r.hits);
+			var avg = GoAccess.Insights.num(r.avgts);
+			total += h;
+			if (avg <= 100000) {
+				sat += h;
+			} else if (avg <= 500000) {
+				tol += h;
+			} else {
+				frust += h;
+			}
+		});
+		if (!total) return null;
+		var apdex = (sat + tol * 0.5) / total;
+		var satPct = (100 * sat / total).toFixed(1);
+		var tolPct = (100 * tol / total).toFixed(1);
+		var frustPct = (100 * frust / total).toFixed(1);
+		var rating = apdex >= 0.94 ? 'Excellent' : (apdex >= 0.85 ? 'Good' : (apdex >= 0.70 ? 'Fair' : 'Poor'));
+		var tone = apdex >= 0.94 ? 'ok' : (apdex >= 0.85 ? '' : (apdex >= 0.70 ? 'warn' : 'danger'));
+		return {
+			label: 'Latency Health (Apdex)',
+			value: apdex.toFixed(2) + ' · ' + rating + ' (' + satPct + '% < 100ms)',
+			sub: '100–500ms: ' + tolPct + '% · >500ms: ' + frustPct + '%',
+			tone: tone,
 		};
 	},
 
@@ -819,7 +853,7 @@ GoAccess.Insights = {
 		var top404 = this.topBy(nf, function (r) { return GoAccess.Insights.num(r.hits); }, 1)[0];
 		return {
 			label: 'Server errors (5xx share)',
-			value: share.toFixed(1) + '% of classified hits (' + serverErr.toLocaleString() + ')',
+			value: share.toFixed(2) + '% of classified hits (' + serverErr.toLocaleString() + ')',
 			sub: top404 ? 'Top 404: ' + this.fmtURL(top404.data) + ' (' + this.num(top404.hits).toLocaleString() + ' hits)' : null,
 			tone: share >= 5 ? 'danger' : (share >= 1 ? 'warn' : 'ok'),
 		};
@@ -828,17 +862,62 @@ GoAccess.Insights = {
 	bots: function () {
 		var rows = GoAccess.getPanelData('browsers');
 		rows = rows && rows.data ? rows.data : [];
-		var botHits = 0, total = this.sumHits(rows);
-		rows.forEach(function (r) {
-			if (/crawler/i.test(String(r.data))) botHits += this.num(r.hits);
-		}, this);
+		var total = this.sumHits(rows);
 		if (!total) return null;
-		var share = 100 * botHits / total;
+		var aiHits = 0, searchHits = 0, topAI = null;
+		rows.forEach(function (r) {
+			var name = String(r.data);
+			if (/AI Crawler/i.test(name)) {
+				aiHits += this.num(r.hits);
+				var items = r.items || [];
+				if (items.length) {
+					var topItem = this.topBy(items, function (it) { return GoAccess.Insights.num(it.hits); }, 1)[0];
+					if (topItem) topAI = topItem;
+				}
+			} else if (/Crawler/i.test(name)) {
+				searchHits += this.num(r.hits);
+			}
+		}, this);
+		var botHits = aiHits + searchHits;
+		if (!botHits) return null;
+		var totalShare = (100 * botHits / total).toFixed(1);
+		var aiShare = (100 * aiHits / total).toFixed(1);
+		var searchShare = (100 * searchHits / total).toFixed(1);
+		var subParts = [];
+		if (topAI) subParts.push('Top AI: ' + this.esc(String(topAI.data)));
+		subParts.push('Search bots: ' + searchShare + '%');
 		return {
-			label: 'Crawler share',
-			value: share.toFixed(1) + '% of browser-classified hits',
-			sub: botHits.toLocaleString() + ' crawler hits',
-			tone: share >= 30 ? 'warn' : '',
+			label: 'AI & Search Bot Share',
+			value: 'AI: ' + aiShare + '% · Search: ' + searchShare + '% (' + botHits.toLocaleString() + ' hits)',
+			sub: subParts.join(' · '),
+			tone: (botHits / total) >= 0.3 ? 'warn' : '',
+		};
+	},
+
+	scannerRadar: function () {
+		var nf = GoAccess.getPanelData('not_found');
+		nf = nf && nf.data ? nf.data : [];
+		if (!nf.length) return null;
+		var totalHits = this.sumHits(nf);
+		if (!totalHits) return null;
+		var probePattern = new RegExp('(\\.env|\\.git|\\.aws|\\.ssh|\\.yaml|\\.yml|\\.bak|\\.old|\\.swp|\\.save|\\.ini|\\.conf|\\.json|\\.sql|\\.tar|\\.zip|\\.tgz|\\.rar|\\.gz|\\.7z|wp-admin|wp-content|wp-includes|wordpress|wp-login|xmlrpc|phpmyadmin|pma|setup-config|info\\.php|phpinfo|eval|shell|cgi-bin|actuator|remote/fgt_lang|\\.php[0-9]?|\\.aspx?|\\.jsp)', 'i');
+		var probeHits = 0, probeRows = [];
+		nf.forEach(function (r) {
+			var url = String(r.data || '');
+			if (probePattern.test(url)) {
+				var h = GoAccess.Insights.num(r.hits);
+				probeHits += h;
+				probeRows.push(r);
+			}
+		});
+		if (!probeHits) return null;
+		var probePct = (100 * probeHits / totalHits).toFixed(1);
+		var topProbe = this.topBy(probeRows, function (r) { return GoAccess.Insights.num(r.hits); }, 1)[0];
+		return {
+			label: 'Threat Radar (Vulnerability Probes)',
+			value: probePct + '% of top 404s (' + probeHits.toLocaleString() + ' probe hits)',
+			sub: topProbe ? 'Top probe: ' + this.fmtURL(topProbe.data) + ' (' + this.num(topProbe.hits).toLocaleString() + ' hits)' : null,
+			tone: probePct >= 50 ? 'danger' : (probePct >= 20 ? 'warn' : ''),
 		};
 	},
 
@@ -846,14 +925,27 @@ GoAccess.Insights = {
 		var rows = GoAccess.getPanelData('vhosts');
 		rows = rows && rows.data ? rows.data : [];
 		rows = rows.filter(function (r) { return String(r.data) !== 'UNKNOWN'; });
-		var top = this.topBy(rows, function (r) { return GoAccess.Insights.num(r.hits); }, 1)[0];
-		if (!top) return null;
-		var pct = GoAccess.Util.getPercent(top.hits);
+		if (!rows.length) return null;
+		var topHits = this.topBy(rows, function (r) { return GoAccess.Insights.num(r.hits); }, 1)[0];
+		var topBytes = this.topBy(rows, function (r) { return GoAccess.Insights.num(r.bytes); }, 1)[0];
+		if (!topHits) return null;
+		var pctHits = GoAccess.Util.getPercent(topHits.hits);
+		var subText = this.num(topHits.hits).toLocaleString() + ' hits';
+		var tone = '';
+		if (topBytes && String(topBytes.data) !== String(topHits.data)) {
+			var pctBw = GoAccess.Util.getPercent(topBytes.bytes);
+			var bwFormatted = GoAccess.Util.fmtValue(this.num(topBytes.bytes), 'bytes');
+			subText = 'Top bandwidth: ' + this.esc(String(topBytes.data)) + ' (' + (pctBw ? pctBw + ' · ' : '') + bwFormatted + ')';
+			var bwRatio = GoAccess.Util.getCount(topBytes.bytes);
+			if (bwRatio && GoAccess.Util.isNumeric(bwRatio.percent) && +bwRatio.percent >= 75) {
+				tone = 'warn';
+			}
+		}
 		return {
-			label: 'Top virtual host',
-			value: this.esc(String(top.data)) + (pct ? ' · ' + pct : ''),
-			sub: this.num(top.hits).toLocaleString() + ' hits',
-			tone: '',
+			label: 'Top Virtual Host',
+			value: this.esc(String(topHits.data)) + (pctHits ? ' · ' + pctHits : ''),
+			sub: subText,
+			tone: tone,
 		};
 	},
 
@@ -862,9 +954,10 @@ GoAccess.Insights = {
 		rows = rows && rows.data ? rows.data : [];
 		var top = this.topBy(rows, function (r) { return GoAccess.Insights.num(r.hits); }, 1)[0];
 		if (!top) return null;
+		var pct = GoAccess.Util.getPercent(top.hits);
 		return {
-			label: 'Peak hour',
-			value: this.esc(String(top.data)) + ':00 · ' + this.num(top.hits).toLocaleString() + ' hits',
+			label: 'Peak Hour',
+			value: this.esc(String(top.data)) + ':00 · ' + this.num(top.hits).toLocaleString() + ' hits' + (pct ? ' (' + pct + ')' : ''),
 			sub: null,
 			tone: '',
 		};
@@ -872,11 +965,23 @@ GoAccess.Insights = {
 
 	build: function (general) {
 		var out = [];
-		[g => this.slowest(), g => this.bandwidthHog(), g => this.errors(g), g => this.bots(), g => this.vhostConcentration(), g => this.peakHour()].forEach(function (fn) {
+		var self = this;
+		var fns = [
+			function () { return self.slowest(); },
+			function () { return self.latencyHealth(); },
+			function () { return self.bandwidthHog(); },
+			function () { return self.errors(general); },
+			function () { return self.bots(); },
+			function () { return self.scannerRadar(); },
+			function () { return self.vhostConcentration(); },
+			function () { return self.peakHour(); }
+		];
+		fns.forEach(function (fn) {
 			try {
-				var item = fn(general);
+				var item = fn();
 				if (item) out.push(item);
-			} catch (e) { /* degrade silently per insight */ }
+			} catch (e) {
+			}
 		});
 		return out.slice(0, this.maxRows);
 	},
