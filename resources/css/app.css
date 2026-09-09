@@ -543,6 +543,13 @@ body.layout-vertical #panels {
 	color: var(--accent-primary) !important;
 }
 
+.dropdown-menu > li > a:focus-visible,
+.dropdown-toggle:focus-visible,
+.panel-focus-btn:focus-visible {
+	outline: 2px solid var(--accent-primary) !important;
+	outline-offset: 2px !important;
+}
+
 .dropdown-header {
 	font-size: 10.5px !important;
 	font-weight: 700 !important;

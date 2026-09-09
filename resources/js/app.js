@@ -1321,11 +1321,27 @@ GoAccess.Panels = {
 			item.onclick = function (e) {
 				if (e && e.preventDefault) e.preventDefault();
 				if (e && e.stopPropagation) e.stopPropagation();
-				this.toggleOpts(e.currentTarget);
+				// Keyboard-triggered clicks (Enter/Space) report detail === 0:
+				// move focus into the menu so it is operable without a mouse.
+				var viaKeyboard = e && e.detail === 0;
+				this.toggleOpts(e.currentTarget, viaKeyboard);
 			}.bind(this);
 			item.onblur = null;
+			item.onkeydown = function (e) {
+				var key = e.key;
+				if (key === 'ArrowDown' || key === 'Down') {
+					if (e.preventDefault) e.preventDefault();
+					if (e.stopPropagation) e.stopPropagation();
+					this.openOpts(e.currentTarget, true);
+				} else if (key === 'ArrowUp' || key === 'Up') {
+					if (e.preventDefault) e.preventDefault();
+					if (e.stopPropagation) e.stopPropagation();
+					this.openOpts(e.currentTarget, 'last');
+				}
+			}.bind(this);
 		}.bind(this));
 		this.bindGlobalOptsCloser();
+		this.bindOptsMenuKeys();
 
 		$$('.panel-focus-btn', function (item) {
 			item.onclick = function (e) {
@@ -1423,38 +1439,93 @@ GoAccess.Panels = {
 		}
 	},
 
-	openOpts: function (targ) {
+	openOpts: function (targ, focusMenu) {
 		if (!targ || !targ.parentElement) return;
 		var panel = targ.getAttribute('data-panel');
 		targ.setAttribute('aria-expanded', 'true');
 		targ.parentElement.classList.add('open');
 		this.renderOpts(panel);
+		if (focusMenu) this.focusMenuItem(panel, focusMenu === 'last' ? 'last' : 'first');
 	},
 
-	closeOpts: function (targ) {
+	closeOpts: function (targ, refocus) {
 		var btn = targ && targ.getAttribute ? targ : (targ && targ.currentTarget);
 		if (!btn || !btn.parentElement) return;
 		btn.parentElement.classList.remove('open');
 		var expanded = btn.parentElement.querySelector('[aria-expanded]');
 		if (expanded) expanded.setAttribute('aria-expanded', 'false');
+		if (refocus && btn.focus) btn.focus();
 	},
 
-	closeAllOpts: function (except) {
+	closeAllOpts: function (except, refocus) {
 		var self = this;
 		$$('[data-toggle=dropdown]', function (item) {
 			if (item !== except) self.closeOpts(item);
 		});
+		if (refocus && except && except.focus) except.focus();
 	},
 
-	toggleOpts: function (targ) {
+	toggleOpts: function (targ, focusMenu) {
 		if (!targ || !targ.parentElement) return;
 		var isOpen = targ.parentElement.classList.contains('open');
 		this.closeAllOpts(targ);
 		if (isOpen) {
 			this.closeOpts(targ);
 		} else {
-			this.openOpts(targ);
+			this.openOpts(targ, focusMenu);
 		}
+	},
+
+	getMenuLinks: function (panel) {
+		var menu = $('.panel-opts-' + panel);
+		if (!menu) return [];
+		return Array.prototype.filter.call(menu.querySelectorAll('a[href]'), function (a) {
+			return a.offsetParent !== null || a.getClientRects().length > 0;
+		});
+	},
+
+	focusMenuItem: function (panel, which) {
+		var links = this.getMenuLinks(panel);
+		if (!links.length) return;
+		var el = which === 'last' ? links[links.length - 1] : links[0];
+		if (el && el.focus) el.focus();
+	},
+
+	bindOptsMenuKeys: function () {
+		var self = this;
+		$$('.dropdown-menu[class*="panel-opts-"]', function (menu) {
+			if (menu._optsKeysBound) return;
+			menu._optsKeysBound = true;
+			menu.onkeydown = function (e) {
+				var link = e.target && e.target.closest ? e.target.closest('a[href]') : null;
+				if (!link) return;
+				var panel = link.getAttribute('data-panel');
+				var links = self.getMenuLinks(panel);
+				var idx = links.indexOf(link);
+				if (e.key === 'ArrowDown' || e.key === 'Down') {
+					if (e.preventDefault) e.preventDefault();
+					if (e.stopPropagation) e.stopPropagation();
+					var next = links[(idx + 1) % links.length];
+					if (next && next.focus) next.focus();
+				} else if (e.key === 'ArrowUp' || e.key === 'Up') {
+					if (e.preventDefault) e.preventDefault();
+					if (e.stopPropagation) e.stopPropagation();
+					var prev = links[(idx - 1 + links.length) % links.length];
+					if (prev && prev.focus) prev.focus();
+				} else if (e.key === 'Home') {
+					if (e.preventDefault) e.preventDefault();
+					if (links[0] && links[0].focus) links[0].focus();
+				} else if (e.key === 'End') {
+					if (e.preventDefault) e.preventDefault();
+					var last = links[links.length - 1];
+					if (last && last.focus) last.focus();
+				} else if (e.key === 'Tab') {
+					// Let Tab move naturally out of the menu, then close it.
+					var btn = document.querySelector('[data-toggle=dropdown][data-panel="' + panel + '"]');
+					setTimeout(function () { self.closeOpts(btn); }, 0);
+				}
+			};
+		});
 	},
 
 	bindGlobalOptsCloser: function () {
@@ -1467,7 +1538,16 @@ GoAccess.Panels = {
 			self.closeAllOpts(null);
 		}, true);
 		document.addEventListener('keydown', function (e) {
-			if (e.key === 'Escape') self.closeAllOpts(null);
+			if (e.key === 'Escape') {
+				var open = document.querySelector('.dropdown.open [data-toggle=dropdown]');
+				self.closeAllOpts(null);
+				if (open && open.focus) open.focus();
+			}
+		}, true);
+		document.addEventListener('focusin', function (e) {
+			if (e.target && e.target.closest && e.target.closest('.dropdown'))
+				return;
+			self.closeAllOpts(null);
 		}, true);
 	},
 

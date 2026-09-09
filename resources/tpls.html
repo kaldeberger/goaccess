@@ -132,32 +132,32 @@
 
 <!-- TPL Panel Options DropDown -->
 <script id="tpl-panel-opts" type="text/template">
-	<li class="dropdown-header">{{ labels.chart_opts }}</li>
-	<li><a href="javascript:void(0);" data-panel="{{id}}" data-chart="{{showChart}}"><i class="fa fa-{{#showChart}}check-{{/showChart}}square-o"></i> {{labels.chart}}</a></li>
+	<li class="dropdown-header" role="presentation">{{ labels.chart_opts }}</li>
+	<li role="presentation"><a href="javascript:void(0);" role="menuitemcheckbox" aria-checked="{{#showChart}}true{{/showChart}}{{^showChart}}false{{/showChart}}" data-panel="{{id}}" data-chart="{{showChart}}"><i class="fa fa-{{#showChart}}check-{{/showChart}}square-o"></i> {{labels.chart}}</a></li>
 
 	{{#plot.length}}
-	<li class="dropdown-header">{{ labels.type }}</li>
-	<li><a href="javascript:void(0);" data-panel="{{id}}" data-chart-type="area-spline"><i class="fa fa-circle{{^area-spline}}-o{{/area-spline}}"></i> {{labels.area_spline}}</a></li>
-	<li><a href="javascript:void(0);" data-panel="{{id}}" data-chart-type="bar"><i class="fa fa-circle{{^bar}}-o{{/bar}}"></i> {{labels.bar}}</a></li>
+	<li class="dropdown-header" role="presentation">{{ labels.type }}</li>
+	<li role="presentation"><a href="javascript:void(0);" role="menuitemradio" aria-checked="{{#area-spline}}true{{/area-spline}}{{^area-spline}}false{{/area-spline}}" data-panel="{{id}}" data-chart-type="area-spline"><i class="fa fa-circle{{^area-spline}}-o{{/area-spline}}"></i> {{labels.area_spline}}</a></li>
+	<li role="presentation"><a href="javascript:void(0);" role="menuitemradio" aria-checked="{{#bar}}true{{/bar}}{{^bar}}false{{/bar}}" data-panel="{{id}}" data-chart-type="bar"><i class="fa fa-circle{{^bar}}-o{{/bar}}"></i> {{labels.bar}}</a></li>
 	{{#hasMap}}
-	<li><a href="javascript:void(0);" data-panel="{{id}}" data-chart-type="wmap"><i class="fa fa-circle{{^wmap}}-o{{/wmap}}"></i> {{labels.wmap}}</a></li>
-	<li><a href="javascript:void(0);" data-panel="{{id}}" data-chart-type="gmap"><i class="fa fa-circle{{^gmap}}-o{{/gmap}}"></i> {{labels.gmap}}</a></li>
+	<li role="presentation"><a href="javascript:void(0);" role="menuitemradio" aria-checked="{{#wmap}}true{{/wmap}}{{^wmap}}false{{/wmap}}" data-panel="{{id}}" data-chart-type="wmap"><i class="fa fa-circle{{^wmap}}-o{{/wmap}}"></i> {{labels.wmap}}</a></li>
+	<li role="presentation"><a href="javascript:void(0);" role="menuitemradio" aria-checked="{{#gmap}}true{{/gmap}}{{^gmap}}false{{/gmap}}" data-panel="{{id}}" data-chart-type="gmap"><i class="fa fa-circle{{^gmap}}-o{{/gmap}}"></i> {{labels.gmap}}</a></li>
 	{{/hasMap}}
-	<li class="dropdown-header">{{labels.plot_metric}}</li>
+	<li class="dropdown-header" role="presentation">{{labels.plot_metric}}</li>
 	{{#plot}}
-	<li><a href="javascript:void(0);" data-panel="{{id}}" data-plot="{{className}}" class="panel-plot-{{className}}"><i class="fa fa-circle{{^selected}}-o{{/selected}}"></i> {{label}}</a></li>
+	<li role="presentation"><a href="javascript:void(0);" role="menuitemradio" aria-checked="{{#selected}}true{{/selected}}{{^selected}}false{{/selected}}" data-panel="{{id}}" data-plot="{{className}}" class="panel-plot-{{className}}"><i class="fa fa-circle{{^selected}}-o{{/selected}}"></i> {{label}}</a></li>
 	{{/plot}}
 	{{/plot.length}}
 
-	<li class="dropdown-header">{{labels.table_columns}}</li>
+	<li class="dropdown-header" role="presentation">{{labels.table_columns}}</li>
 	{{#items}}
-	<li><a href="javascript:void(0);" data-panel="{{id}}" data-metric="{{key}}"><i class="fa fa-{{^hide}}check-{{/hide}}square-o"></i> {{label}}</a></li>
+	<li role="presentation"><a href="javascript:void(0);" role="menuitemcheckbox" aria-checked="{{#hide}}false{{/hide}}{{^hide}}true{{/hide}}" data-panel="{{id}}" data-metric="{{key}}"><i class="fa fa-{{^hide}}check-{{/hide}}square-o"></i> {{label}}</a></li>
 	{{/items}}
 
 	<li class="divider" role="separator"></li>
-	<li class="dropdown-header">Export</li>
-	<li><a href="javascript:void(0);" data-panel="{{id}}" class="panel-export-csv"><i class="fa fa-file-text-o"></i> Export Table (CSV)</a></li>
-	<li><a href="javascript:void(0);" data-panel="{{id}}" class="panel-export-json"><i class="fa fa-code"></i> Export Panel (JSON)</a></li>
+	<li class="dropdown-header" role="presentation">Export</li>
+	<li role="presentation"><a href="javascript:void(0);" role="menuitem" data-panel="{{id}}" class="panel-export-csv"><i class="fa fa-file-text-o"></i> Export Table (CSV)</a></li>
+	<li role="presentation"><a href="javascript:void(0);" role="menuitem" data-panel="{{id}}" class="panel-export-json"><i class="fa fa-code"></i> Export Panel (JSON)</a></li>
 </script>
 
 <!-- TPL Table colgroup -->
@@ -190,10 +190,10 @@
 					<i class="fa fa-arrows-alt" aria-hidden="true"></i>
 				</button>
 				<div class="dropdown">
-					<button class="btn btn-default btn-sm dropdown-toggle" type="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false" data-panel="{{id}}" aria-label="{{labels.panel_opts}}, {{head}}">
+					<button class="btn btn-default btn-sm dropdown-toggle" type="button" data-toggle="dropdown" aria-haspopup="menu" aria-expanded="false" aria-controls="panel-menu-{{id}}" data-panel="{{id}}" aria-label="{{labels.panel_opts}}, {{head}}">
 						<i class="fa fa-gear" aria-hidden="true"></i> <span class="hidden-xs">{{labels.panel_opts}}</span> <span class="fa fa-caret-down" aria-hidden="true"></span>
 					</button>
-					<ul class="dropdown-menu dropdown-menu-right panel-opts-{{id}}">
+					<ul class="dropdown-menu dropdown-menu-right panel-opts-{{id}}" id="panel-menu-{{id}}" role="menu" aria-label="{{labels.panel_opts}}, {{head}}">
 					</ul>
 				</div>
 			</div>
