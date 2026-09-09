@@ -426,6 +426,13 @@ window.GoAccess = window.GoAccess || {
 GoAccess.Util = {
 	months: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul","Aug", "Sep", "Oct", "Nov", "Dec"],
 
+	// Escape a string for safe HTML interpolation
+	escapeHTML: function (s) {
+		return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+			return ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]);
+		});
+	},
+
 	// Add all attributes of n to o
 	merge: function (o, n) {
 		var obj = {}, i = 0, il = arguments.length, key;
@@ -732,6 +739,149 @@ GoAccess.Toast = {
 	}
 };
 
+// KEY INSIGHTS (frontend-only summary over existing window.json_data).
+// No new log fields or C aggregation: reads general + requests +
+// status_codes/not_found + browsers + vhosts/visit_time. Every insight
+// degrades to null when its source panel/field is absent.
+GoAccess.Insights = {
+	maxRows: 6,
+
+	num: function (v) {
+		var n = GoAccess.Util.getCount(v);
+		return GoAccess.Util.isNumeric(n) ? +n : 0;
+	},
+
+	topBy: function (rows, fn, n) {
+		rows = (rows || []).slice();
+		rows.sort(function (a, b) { return fn(b) - fn(a); });
+		return rows.slice(0, n || 1);
+	},
+
+	sumHits: function (rows) {
+		var t = 0;
+		(rows || []).forEach(function (r) { t += GoAccess.Insights.num(r.hits); });
+		return t;
+	},
+
+	esc: function (s) {
+		return GoAccess.Util.escapeHTML(s);
+	},
+
+	fmtURL: function (url, max) {
+		url = String(url == null ? '' : url);
+		max = max || 60;
+		var short = url.length > max ? url.slice(0, max - 1) + '…' : url;
+		return this.esc(short);
+	},
+
+	slowest: function () {
+		var rows = GoAccess.getPanelData('requests');
+		rows = rows && rows.data ? rows.data : [];
+		rows = rows.filter(function (r) { return GoAccess.Insights.num(r.avgts) > 0; });
+		var top = this.topBy(rows, function (r) { return GoAccess.Insights.num(r.avgts); }, 1)[0];
+		if (!top) return null;
+		return {
+			label: 'Slowest endpoint (avg)',
+			value: this.fmtURL(top.data) + ' · ' + GoAccess.Util.fmtValue(this.num(top.avgts), 'utime'),
+			sub: this.num(top.hits).toLocaleString() + ' hits · max ' + GoAccess.Util.fmtValue(this.num(top.maxts), 'utime'),
+			tone: this.num(top.avgts) >= 1E6 ? 'warn' : '',
+		};
+	},
+
+	bandwidthHog: function () {
+		var rows = GoAccess.getPanelData('requests');
+		rows = rows && rows.data ? rows.data : [];
+		rows = rows.filter(function (r) { return GoAccess.Insights.num(r.bytes) > 0; });
+		var top = this.topBy(rows, function (r) { return GoAccess.Insights.num(r.bytes); }, 1)[0];
+		if (!top) return null;
+		var pct = GoAccess.Util.getPercent(top.bytes);
+		return {
+			label: 'Top bandwidth URL',
+			value: this.fmtURL(top.data) + ' · ' + GoAccess.Util.fmtValue(this.num(top.bytes), 'bytes'),
+			sub: pct ? pct + ' of served bytes' : this.num(top.hits).toLocaleString() + ' hits',
+			tone: '',
+		};
+	},
+
+	errors: function (general) {
+		var rows = GoAccess.getPanelData('status_codes');
+		rows = rows && rows.data ? rows.data : [];
+		var serverErr = 0, total = 0;
+		rows.forEach(function (r) {
+			var h = GoAccess.Insights.num(r.hits);
+			total += h;
+			if (/^5xx/.test(String(r.data))) serverErr += h;
+		});
+		if (!total) return null;
+		var share = total ? (100 * serverErr / total) : 0;
+		var nf = GoAccess.getPanelData('not_found');
+		nf = nf && nf.data ? nf.data : [];
+		var top404 = this.topBy(nf, function (r) { return GoAccess.Insights.num(r.hits); }, 1)[0];
+		return {
+			label: 'Server errors (5xx share)',
+			value: share.toFixed(1) + '% of classified hits (' + serverErr.toLocaleString() + ')',
+			sub: top404 ? 'Top 404: ' + this.fmtURL(top404.data) + ' (' + this.num(top404.hits).toLocaleString() + ' hits)' : null,
+			tone: share >= 5 ? 'danger' : (share >= 1 ? 'warn' : 'ok'),
+		};
+	},
+
+	bots: function () {
+		var rows = GoAccess.getPanelData('browsers');
+		rows = rows && rows.data ? rows.data : [];
+		var botHits = 0, total = this.sumHits(rows);
+		rows.forEach(function (r) {
+			if (/crawler/i.test(String(r.data))) botHits += this.num(r.hits);
+		}, this);
+		if (!total) return null;
+		var share = 100 * botHits / total;
+		return {
+			label: 'Crawler share',
+			value: share.toFixed(1) + '% of browser-classified hits',
+			sub: botHits.toLocaleString() + ' crawler hits',
+			tone: share >= 30 ? 'warn' : '',
+		};
+	},
+
+	vhostConcentration: function () {
+		var rows = GoAccess.getPanelData('vhosts');
+		rows = rows && rows.data ? rows.data : [];
+		rows = rows.filter(function (r) { return String(r.data) !== 'UNKNOWN'; });
+		var top = this.topBy(rows, function (r) { return GoAccess.Insights.num(r.hits); }, 1)[0];
+		if (!top) return null;
+		var pct = GoAccess.Util.getPercent(top.hits);
+		return {
+			label: 'Top virtual host',
+			value: this.esc(String(top.data)) + (pct ? ' · ' + pct : ''),
+			sub: this.num(top.hits).toLocaleString() + ' hits',
+			tone: '',
+		};
+	},
+
+	peakHour: function () {
+		var rows = GoAccess.getPanelData('visit_time');
+		rows = rows && rows.data ? rows.data : [];
+		var top = this.topBy(rows, function (r) { return GoAccess.Insights.num(r.hits); }, 1)[0];
+		if (!top) return null;
+		return {
+			label: 'Peak hour',
+			value: this.esc(String(top.data)) + ':00 · ' + this.num(top.hits).toLocaleString() + ' hits',
+			sub: null,
+			tone: '',
+		};
+	},
+
+	build: function (general) {
+		var out = [];
+		[g => this.slowest(), g => this.bandwidthHog(), g => this.errors(g), g => this.bots(), g => this.vhostConcentration(), g => this.peakHour()].forEach(function (fn) {
+			try {
+				var item = fn(general);
+				if (item) out.push(item);
+			} catch (e) { /* degrade silently per insight */ }
+		});
+		return out.slice(0, this.maxRows);
+	},
+};
+
 // OVERALL STATS
 GoAccess.OverallStats = {
 	total_requests: 0,
@@ -790,6 +940,8 @@ GoAccess.OverallStats = {
 		$('#overall').innerHTML = GoAccess.AppTpls.General.wrap.render(GoAccess.Util.merge(ui, {
 			'from': data.start_date,
 			'to': data.end_date,
+			'meta': this.renderMeta(data),
+			'insights': GoAccess.Insights.build(data),
 		}));
 		$('#overall').setAttribute('aria-labelledby', 'overall-heading');
 
@@ -800,6 +952,17 @@ GoAccess.OverallStats = {
 			row = this.renderBox(data, ui, row, x, idx);
 			idx++;
 		}
+	},
+
+	// One-line provenance: generated at, log source, log size.
+	renderMeta: function (data) {
+		var bits = [];
+		if (data.date_time) bits.push('Generated ' + GoAccess.Util.escapeHTML(String(data.date_time)));
+		if (data.log_path && data.log_path.length)
+			bits.push('Source: ' + GoAccess.Util.escapeHTML([].concat(data.log_path).join(', ')));
+		if (data.log_size != null) bits.push('Log size: ' + GoAccess.Util.fmtValue(data.log_size, 'bytes'));
+		if (data.generation_time != null) bits.push('Parsed in ' + GoAccess.Util.fmtValue(data.generation_time, 'secs'));
+		return bits.join(' &middot; ');
 	},
 
 	// Render general/overall analyzed requests.

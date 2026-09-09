@@ -2,7 +2,12 @@
 <script id="tpl-general" type="text/template">
     <div class="overall-header">
       <h2 class="gheader" id="overall-heading"><i class="fa fa-dashboard" aria-hidden="true"></i> {{head}}</h2>
-      <span class="overall-date-range text-muted">{{#from}}{{from}}{{/from}}{{#to}} &ndash; {{to}}{{/to}}</span>
+      <span class="overall-date-range text-muted">{{#from}}{{from}}{{/from}}{{^from}}<span class="overall-date-empty">No dated requests in this report</span>{{/from}}{{#to}} &ndash; {{to}}{{/to}}</span>
+    </div>
+    <p class="overall-meta text-muted" aria-live="polite">{{#meta}}{{{meta}}}{{/meta}}</p>
+    <div class="key-insights" aria-label="Key insights">
+      <h3 class="key-insights-title">Key insights</h3>
+      <ul role="list" class="key-insights-grid">{{#insights}}<li class="insight-card insight-{{tone}}"><span class="insight-label">{{label}}</span><span class="insight-value">{{{value}}}</span>{{#sub}}<span class="insight-sub">{{{sub}}}</span>{{/sub}}</li>{{/insights}}{{^insights}}<li class="insight-card insight-muted"><span class="insight-label">No insights</span><span class="insight-value">Not enough data in this report</span></li>{{/insights}}</ul>
     </div>
 	<ul role="list" class="overall-stats-grid"></ul>
 </script>
