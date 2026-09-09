@@ -97,12 +97,15 @@ else
 endif
 # App.css
 src/appcss.h: bin2c$(EXEEXT) $(srcdir)/resources/css/app.css
-if HAS_SEDTR
-	cat $(srcdir)/resources/css/app.css | sed "s/^[[:space:]]*//" | sed "/^$$/d" | tr -d "\r\n" > $(srcdir)/resources/css/app.css.tmp
-	./bin2c $(srcdir)/resources/css/app.css.tmp src/appcss.h app_css
-else
-	./bin2c $(srcdir)/resources/css/app.css src/appcss.h app_css
-endif
+	@if test -f $(srcdir)/resources/css/app.min.css; then \
+		echo "Embedding pre-minified app.min.css"; \
+		./bin2c $(srcdir)/resources/css/app.min.css src/appcss.h app_css; \
+	elif test "x$(HAS_SEDTR)" = "xyes"; then \
+		cat $(srcdir)/resources/css/app.css | sed "s/^[[:space:]]*//" | sed "/^$$/d" > $(srcdir)/resources/css/app.css.tmp; \
+		./bin2c $(srcdir)/resources/css/app.css.tmp src/appcss.h app_css; \
+	else \
+		./bin2c $(srcdir)/resources/css/app.css src/appcss.h app_css; \
+	fi
 # D3.js
 src/d3js.h: bin2c$(EXEEXT) $(srcdir)/resources/js/d3.v7.min.js
 if HAS_SEDTR
@@ -130,7 +133,7 @@ endif
 # Charts.js
 src/chartsjs.h: bin2c$(EXEEXT) $(srcdir)/resources/js/charts.js
 if HAS_SEDTR
-	cat $(srcdir)/resources/js/charts.js | sed -E "s@(,|;)[[:space:]]*//..*@\1@g" | sed -E "s@^[[:space:]]*//..*@@g" | sed "s/^[[:space:]]*//" | sed "/^$$/d" | tr -d "\r\n" > $(srcdir)/resources/js/charts.js.tmp
+	cat $(srcdir)/resources/js/charts.js | sed -E "s@(,|;)[[:space:]]*//..*@\1@g" | sed -E "s@^[[:space:]]*//..*@@g" | sed "s/^[[:space:]]*//" | sed "/^$$/d" > $(srcdir)/resources/js/charts.js.tmp
 	./bin2c $(srcdir)/resources/js/charts.js.tmp src/chartsjs.h charts_js
 else
 	./bin2c $(srcdir)/resources/js/charts.js src/chartsjs.h charts_js
@@ -140,12 +143,15 @@ if DEBUG
 endif
 # App.js
 src/appjs.h: bin2c$(EXEEXT) $(srcdir)/resources/js/app.js
-if HAS_SEDTR
-	cat $(srcdir)/resources/js/app.js | sed -E "s@(,|;)[[:space:]]*//..*@\1@g" | sed -E "s@^[[:space:]]*//..*@@g" | sed "s/^[[:space:]]*//" | sed "/^$$/d" | tr -d "\r\n" > $(srcdir)/resources/js/app.js.tmp
-	./bin2c $(srcdir)/resources/js/app.js.tmp src/appjs.h app_js
-else
-	./bin2c $(srcdir)/resources/js/app.js src/appjs.h app_js
-endif
+	@if test -f $(srcdir)/resources/js/app.min.js; then \
+		echo "Embedding pre-minified app.min.js"; \
+		./bin2c $(srcdir)/resources/js/app.min.js src/appjs.h app_js; \
+	elif test "x$(HAS_SEDTR)" = "xyes"; then \
+		cat $(srcdir)/resources/js/app.js | sed -E "s@(,|;)[[:space:]]*//..*@\1@g" | sed -E "s@^[[:space:]]*//..*@@g" | sed "s/^[[:space:]]*//" | sed "/^$$/d" > $(srcdir)/resources/js/app.js.tmp; \
+		./bin2c $(srcdir)/resources/js/app.js.tmp src/appjs.h app_js; \
+	else \
+		./bin2c $(srcdir)/resources/js/app.js src/appjs.h app_js; \
+	fi
 if DEBUG
 	./bin2c $(srcdir)/resources/js/app.js src/appjs.h app_js
 endif

@@ -1,0 +1,15 @@
+{
+  "name": "goaccess-web",
+  "version": "1.11.0",
+  "private": true,
+  "description": "Asset pipeline for GoAccess modern HTML web report",
+  "scripts": {
+    "build": "npm run build:js && npm run build:css",
+    "build:js": "esbuild resources/js/app.js --minify --target=es2018 --outfile=resources/js/app.min.js && touch resources/js/app.js",
+    "build:css": "esbuild resources/css/app.css --minify --outfile=resources/css/app.min.css && touch resources/css/app.css",
+    "watch": "esbuild resources/js/app.js resources/css/app.css --minify --outdir=resources/dist --watch"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
+  }
+}

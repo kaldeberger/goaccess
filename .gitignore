@@ -115,3 +115,6 @@ Makefile.in
 /resources/js/topojson.v3.min.js.tmp
 goaccess_report.sh
 *_report.html
+node_modules/
+/resources/js/app.min.js
+/resources/css/app.min.css
