@@ -883,21 +883,41 @@ GoAccess.Insights = {
 
 	// Log-format coverage: which optional fields actually produced data.
 	// Shown as a muted banner so legacy logs explain degraded insights.
+	// Percentages are hits-weighted estimates from aggregated panels
+	// (panels may be top-N truncated), not exact per-line counts.
 	coverage: function () {
+		var general = GoAccess.getPanelData('general') || {};
+		var total = this.num(general.valid_requests) || this.num(general.total_requests) || 0;
 		var parts = [];
 		var vhosts = GoAccess.getPanelData('vhosts');
 		vhosts = vhosts && vhosts.data ? vhosts.data : [];
-		var hasVhost = vhosts.some(function (r) { return String(r.data) !== 'UNKNOWN'; });
-		parts.push({key: 'vhost (%v)', ok: hasVhost});
+		var unknownHits = 0, vhostHits = 0;
+		vhosts.forEach(function (r) {
+			var h = GoAccess.Insights.num(r.hits);
+			vhostHits += h;
+			if (String(r.data) === 'UNKNOWN') unknownHits += h;
+		});
+		var vhostPct = vhostHits > 0 ? Math.round(100 * (vhostHits - unknownHits) / vhostHits) : null;
+		parts.push({key: 'vhost (%v)', ok: vhostPct != null && vhostPct > 0, pct: vhostPct});
 		var req = GoAccess.getPanelData('requests');
 		req = req && req.data ? req.data : [];
-		var hasTiming = req.some(function (r) { return GoAccess.Insights.num(r.avgts) > 0 || GoAccess.Insights.num(r.cumts) > 0; });
-		parts.push({key: 'timing (%T)', ok: hasTiming});
-		var hasBytes = req.some(function (r) { return GoAccess.Insights.num(r.bytes) > 0; });
-		parts.push({key: 'bytes (%b)', ok: hasBytes});
+		var timedHits = 0, byteHits = 0, reqHits = 0;
+		req.forEach(function (r) {
+			var h = GoAccess.Insights.num(r.hits);
+			reqHits += h;
+			if (GoAccess.Insights.num(r.avgts) > 0 || GoAccess.Insights.num(r.cumts) > 0) timedHits += h;
+			if (GoAccess.Insights.num(r.bytes) > 0) byteHits += h;
+		});
+		parts.push({key: 'timing (%T)', ok: timedHits > 0, pct: reqHits > 0 ? Math.round(100 * timedHits / reqHits) : null});
+		parts.push({key: 'bytes (%b)', ok: byteHits > 0, pct: reqHits > 0 ? Math.round(100 * byteHits / reqHits) : null});
 		var br = GoAccess.getPanelData('browsers');
 		br = br && br.data ? br.data : [];
-		parts.push({key: 'agent (%u)', ok: br.length > 0});
+		var brTotal = this.sumHits(br), brUnknown = 0;
+		br.forEach(function (r) {
+			if (String(r.data) === 'Unknown' || String(r.data) === 'Others') brUnknown += this.num(r.hits);
+		}, this);
+		parts.push({key: 'agent (%u)', ok: brTotal > 0 && (brTotal - brUnknown) > 0, pct: brTotal > 0 ? Math.round(100 * (brTotal - brUnknown) / brTotal) : null});
+		if (total) parts.total = total;
 		return parts;
 	},
 };
@@ -989,9 +1009,15 @@ GoAccess.OverallStats = {
 	// Coverage banner: which optional log fields produced data.
 	renderCoverage: function () {
 		var parts = GoAccess.Insights.coverage();
+		var fmt = function (p) {
+			var label = GoAccess.Util.escapeHTML(p.key);
+			if (p.pct != null) label += ' ~' + p.pct + '% of hits';
+			return (p.ok ? '✓ ' : '✗ ') + label;
+		};
 		var missing = parts.filter(function (p) { return !p.ok; });
-		if (!missing.length) return '';
-		return 'Limited log fields: no ' + missing.map(function (p) { return GoAccess.Util.escapeHTML(p.key); }).join(', ') + ' data &mdash; related insights hidden, rows preserved.';
+		var summary = parts.map(fmt).join(' &middot; ');
+		if (!missing.length) return 'Log coverage (est.): ' + summary + '.';
+		return 'Log coverage (est.): ' + summary + ' &mdash; related insights hidden, rows preserved.';
 	},
 
 	// Render general/overall analyzed requests.
