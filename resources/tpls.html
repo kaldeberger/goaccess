@@ -8,7 +8,7 @@
     {{#coverage}}<p class="overall-coverage text-muted" role="note">{{{coverage}}}</p>{{/coverage}}
     <div class="key-insights" aria-label="Key insights">
       <h3 class="key-insights-title">Key insights</h3>
-      <ul role="list" class="key-insights-grid">{{#insights}}<li class="insight-card insight-{{tone}}"><span class="insight-label">{{label}}</span><span class="insight-value">{{{value}}}</span>{{#sub}}<span class="insight-sub">{{{sub}}}</span>{{/sub}}</li>{{/insights}}{{^insights}}<li class="insight-card insight-muted"><span class="insight-label">No insights</span><span class="insight-value">Not enough data in this report</span></li>{{/insights}}</ul>
+      <ul role="list" class="key-insights-grid">{{#insights}}<li class="insight-card insight-{{tone}}"><span class="insight-label">{{label}}</span><span class="insight-value">{{{value}}}</span>{{#bar}}<div class="insight-mini-bar" role="progressbar" aria-label="{{label}} distribution">{{#segments}}<div class="insight-bar-seg seg-{{type}}" style="width: {{width}}%;" title="{{label}}: {{width}}%"></div>{{/segments}}</div>{{/bar}}{{#sub}}<span class="insight-sub">{{{sub}}}</span>{{/sub}}</li>{{/insights}}{{^insights}}<li class="insight-card insight-muted"><span class="insight-label">No insights</span><span class="insight-value">Not enough data in this report</span></li>{{/insights}}</ul>
     </div>
 	<ul role="list" class="overall-stats-grid"></ul>
 </script>
@@ -161,7 +161,9 @@
 	{{/items}}
 
 	<li class="divider" role="separator"></li>
-	<li class="dropdown-header" role="presentation">Export</li>
+	<li class="dropdown-header" role="presentation">Export & Copy</li>
+	<li role="presentation"><a href="javascript:void(0);" role="menuitem" data-panel="{{id}}" class="panel-copy-markdown"><i class="fa fa-clipboard"></i> Copy Table (Markdown)</a></li>
+	<li role="presentation"><a href="javascript:void(0);" role="menuitem" data-panel="{{id}}" class="panel-copy-tsv"><i class="fa fa-clone"></i> Copy Table (TSV)</a></li>
 	<li role="presentation"><a href="javascript:void(0);" role="menuitem" data-panel="{{id}}" class="panel-export-csv"><i class="fa fa-file-text-o"></i> Export Table (CSV)</a></li>
 	<li role="presentation"><a href="javascript:void(0);" role="menuitem" data-panel="{{id}}" class="panel-export-json"><i class="fa fa-code"></i> Export Panel (JSON)</a></li>
 </script>
@@ -350,6 +352,11 @@
 		<li {{#autoHideTables}}class="active"{{/autoHideTables}}>
 			<a href="javascript:void(0);" data-autohide-tables="1" title="{{labels.ah_small_title}}">
 				<i class="fa fa-{{#autoHideTables}}check-{{/autoHideTables}}square-o"></i> {{labels.ah_small}}
+			</a>
+		</li>
+		<li {{#compactDensity}}class="active"{{/compactDensity}}>
+			<a href="javascript:void(0);" data-density="compact" title="Toggle compact table rows">
+				<i class="fa fa-{{#compactDensity}}check-{{/compactDensity}}square-o"></i> Compact Row Density
 			</a>
 		</li>
 	</ul>

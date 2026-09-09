@@ -379,6 +379,31 @@ body {
 	overflow-wrap: anywhere;
 }
 
+.insight-mini-bar {
+	display: flex;
+	width: 100%;
+	height: 4px;
+	border-radius: 2px;
+	overflow: hidden;
+	background: var(--border-subtle);
+	margin-top: 5px;
+	margin-bottom: 2px;
+}
+
+.insight-bar-seg {
+	height: 100%;
+	transition: width 0.3s ease;
+}
+
+.insight-bar-seg.seg-fast { background-color: #10b981; }
+.insight-bar-seg.seg-mod { background-color: #f59e0b; }
+.insight-bar-seg.seg-slow { background-color: #ef4444; }
+.insight-bar-seg.seg-ai { background-color: #a855f7; }
+.insight-bar-seg.seg-search { background-color: #3b82f6; }
+.insight-bar-seg.seg-danger { background-color: #f43f5e; }
+.insight-bar-seg.seg-vhost { background-color: #0ea5e9; }
+.insight-bar-seg.seg-neutral { background-color: rgba(125, 125, 125, 0.25); }
+
 .overall-stats-grid {
 	display: grid;
 	grid-template-columns: repeat(6, minmax(0, 1fr));
@@ -784,13 +809,41 @@ article table td.row-expandable:hover {
 }
 
 article table tfoot.tfoot-totals td {
+	position: sticky;
+	bottom: 0;
+	z-index: 4;
 	background-color: var(--bg-card-header);
+	backdrop-filter: blur(8px);
+	-webkit-backdrop-filter: blur(8px);
 	font-weight: 600;
 	font-size: 12.5px;
 	padding: 9px 12px;
-	border-top: 2px solid var(--border-card);
+	border-top: 1px solid var(--border-card);
 	color: var(--text-primary);
 	font-variant-numeric: tabular-nums;
+	box-shadow: 0 -2px 6px rgba(0, 0, 0, 0.08);
+}
+
+/* Compact Table Row Density */
+body.density-compact article table tbody td {
+	padding: 4px 10px;
+	font-size: 12px;
+}
+body.density-compact article table thead tr.thead-cols th {
+	padding: 6px 10px;
+	font-size: 10.5px;
+}
+body.density-compact article table tfoot.tfoot-totals td {
+	padding: 6px 10px;
+	font-size: 11.5px;
+}
+body.density-compact .metric-progress-track {
+	height: 3px;
+	width: 36px;
+}
+body.density-compact .btn-cell-action {
+	padding: 1px 4px;
+	font-size: 10px;
 }
 
 /* Tabular Metric Cell with Inline Progress Track */

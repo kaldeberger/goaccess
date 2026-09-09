@@ -61,6 +61,7 @@ window.GoAccess = window.GoAccess || {
 		this.i18n = (this.opts || {}).i18n || {};
 		this.AppPrefs = {
 			'autoHideTables': true,
+			'compactDensity': false,
 			'layout': 'horizontal',
 			'panelOrder': [],
 			'perPage': 7,
@@ -68,6 +69,9 @@ window.GoAccess = window.GoAccess || {
 			'hiddenPanels': [],
 		};
 		this.AppPrefs = GoAccess.Util.merge(this.AppPrefs, this.opts.prefs);
+		if (typeof document !== 'undefined' && document.body) {
+			document.body.classList.toggle('density-compact', !!this.AppPrefs['compactDensity']);
+		}
 		this.currentJWT = null;
 		this.csrfToken = null;
 		this.authInvalidated = false;
@@ -817,6 +821,13 @@ GoAccess.Insights = {
 		return {
 			label: 'Latency Health (Apdex)',
 			value: apdex.toFixed(2) + ' · ' + rating + ' (' + satPct + '% < 100ms)',
+			bar: {
+				segments: [
+					{ type: 'fast', width: satPct, label: '<100ms' },
+					{ type: 'mod', width: tolPct, label: '100–500ms' },
+					{ type: 'slow', width: frustPct, label: '>500ms' },
+				]
+			},
 			sub: '100–500ms: ' + tolPct + '% · >500ms: ' + frustPct + '%',
 			tone: tone,
 		};
@@ -851,9 +862,20 @@ GoAccess.Insights = {
 		var nf = GoAccess.getPanelData('not_found');
 		nf = nf && nf.data ? nf.data : [];
 		var top404 = this.topBy(nf, function (r) { return GoAccess.Insights.num(r.hits); }, 1)[0];
+		var bar = null;
+		if (serverErr > 0) {
+			var errPct = Math.min(100, Math.max(2, parseFloat(share.toFixed(1))));
+			bar = {
+				segments: [
+					{ type: 'danger', width: errPct, label: '5xx Server Errors' },
+					{ type: 'fast', width: Math.max(0, 100 - errPct).toFixed(1), label: 'Successful' },
+				]
+			};
+		}
 		return {
 			label: 'Server errors (5xx share)',
 			value: share.toFixed(2) + '% of classified hits (' + serverErr.toLocaleString() + ')',
+			bar: bar,
 			sub: top404 ? 'Top 404: ' + this.fmtURL(top404.data) + ' (' + this.num(top404.hits).toLocaleString() + ' hits)' : null,
 			tone: share >= 5 ? 'danger' : (share >= 1 ? 'warn' : 'ok'),
 		};
@@ -883,12 +905,20 @@ GoAccess.Insights = {
 		var totalShare = (100 * botHits / total).toFixed(1);
 		var aiShare = (100 * aiHits / total).toFixed(1);
 		var searchShare = (100 * searchHits / total).toFixed(1);
+		var aiRelative = botHits > 0 ? (100 * aiHits / botHits).toFixed(1) : 0;
+		var searchRelative = botHits > 0 ? (100 * searchHits / botHits).toFixed(1) : 0;
 		var subParts = [];
 		if (topAI) subParts.push('Top AI: ' + this.esc(String(topAI.data)));
 		subParts.push('Search bots: ' + searchShare + '%');
 		return {
 			label: 'AI & Search Bot Share',
 			value: 'AI: ' + aiShare + '% · Search: ' + searchShare + '% (' + botHits.toLocaleString() + ' hits)',
+			bar: {
+				segments: [
+					{ type: 'ai', width: aiRelative, label: 'AI Crawlers' },
+					{ type: 'search', width: searchRelative, label: 'Search Bots' },
+				]
+			},
 			sub: subParts.join(' · '),
 			tone: (botHits / total) >= 0.3 ? 'warn' : '',
 		};
@@ -912,10 +942,17 @@ GoAccess.Insights = {
 		});
 		if (!probeHits) return null;
 		var probePct = (100 * probeHits / totalHits).toFixed(1);
+		var otherPct = Math.max(0, (100 - parseFloat(probePct)).toFixed(1));
 		var topProbe = this.topBy(probeRows, function (r) { return GoAccess.Insights.num(r.hits); }, 1)[0];
 		return {
 			label: 'Threat Radar (Vulnerability Probes)',
 			value: probePct + '% of top 404s (' + probeHits.toLocaleString() + ' probe hits)',
+			bar: {
+				segments: [
+					{ type: 'danger', width: probePct, label: 'Probes' },
+					{ type: 'neutral', width: otherPct, label: 'Standard 404s' },
+				]
+			},
 			sub: topProbe ? 'Top probe: ' + this.fmtURL(topProbe.data) + ' (' + this.num(topProbe.hits).toLocaleString() + ' hits)' : null,
 			tone: probePct >= 50 ? 'danger' : (probePct >= 20 ? 'warn' : ''),
 		};
@@ -932,6 +969,7 @@ GoAccess.Insights = {
 		var pctHits = GoAccess.Util.getPercent(topHits.hits);
 		var subText = this.num(topHits.hits).toLocaleString() + ' hits';
 		var tone = '';
+		var vhostBar = null;
 		if (topBytes && String(topBytes.data) !== String(topHits.data)) {
 			var pctBw = GoAccess.Util.getPercent(topBytes.bytes);
 			var bwFormatted = GoAccess.Util.fmtValue(this.num(topBytes.bytes), 'bytes');
@@ -940,10 +978,20 @@ GoAccess.Insights = {
 			if (bwRatio && GoAccess.Util.isNumeric(bwRatio.percent) && +bwRatio.percent >= 75) {
 				tone = 'warn';
 			}
+			var bwPctVal = parseFloat(pctBw) || 0;
+			if (bwPctVal > 0) {
+				vhostBar = {
+					segments: [
+						{ type: 'vhost', width: Math.min(100, bwPctVal).toFixed(1), label: String(topBytes.data) + ' Bandwidth' },
+						{ type: 'neutral', width: Math.max(0, 100 - bwPctVal).toFixed(1), label: 'Other VHosts' },
+					]
+				};
+			}
 		}
 		return {
 			label: 'Top Virtual Host',
 			value: this.esc(String(topHits.data)) + (pctHits ? ' · ' + pctHits : ''),
+			bar: vhostBar,
 			sub: subText,
 			tone: tone,
 		};
@@ -1272,6 +1320,12 @@ GoAccess.Nav = {
 			}.bind(this);
 		}.bind(this));
 
+		$$('[data-density="compact"]', function (item) {
+			item.onclick = function (e) {
+				this.toggleCompactDensity();
+			}.bind(this);
+		}.bind(this));
+
 		$$('.toggle-panel', function (item) {
 			item.onclick = function (e) {
 				e.stopPropagation();
@@ -1419,6 +1473,16 @@ GoAccess.Nav = {
 		GoAccess.AppPrefs['autoHideTables'] = !autoHideTables;
 		GoAccess.setPrefs();
 
+		this.refreshOptsIfOpen();
+	},
+
+	toggleCompactDensity: function () {
+		var compact = !GoAccess.Tables.compactDensity();
+		GoAccess.AppPrefs['compactDensity'] = compact;
+		GoAccess.setPrefs();
+		if (typeof document !== 'undefined' && document.body) {
+			document.body.classList.toggle('density-compact', compact);
+		}
 		this.refreshOptsIfOpen();
 	},
 
@@ -1571,6 +1635,7 @@ GoAccess.Nav = {
 		o['perPage' + this.getPerPage()] = true;
 		o['autoHideTables'] = GoAccess.Tables.autoHideTables();
 		o['showTables'] = GoAccess.Tables.showTables();
+		o['compactDensity'] = GoAccess.Tables.compactDensity();
 		o['labels'] = GoAccess.i18n;
 
 		navList.innerHTML = GoAccess.AppTpls.Nav.opts.render(o);
@@ -1705,6 +1770,24 @@ GoAccess.Panels = {
 				GoAccess.Tables.toggleColumn(e.currentTarget);
 			}.bind(this);
 		}.bind(this));
+
+		$$('.panel-copy-markdown', function (item) {
+			item.onclick = function (e) {
+				if (e && e.preventDefault) e.preventDefault();
+				e.stopPropagation();
+				var panel = e.currentTarget.getAttribute('data-panel');
+				GoAccess.Tables.copyMarkdown(panel);
+			};
+		});
+
+		$$('.panel-copy-tsv', function (item) {
+			item.onclick = function (e) {
+				if (e && e.preventDefault) e.preventDefault();
+				e.stopPropagation();
+				var panel = e.currentTarget.getAttribute('data-panel');
+				GoAccess.Tables.copyTSV(panel);
+			};
+		});
 
 		$$('.panel-export-csv', function (item) {
 			item.onclick = function (e) {
@@ -2816,9 +2899,14 @@ GoAccess.Tables = {
 		return ('autoHideTables' in GoAccess.getPrefs()) ? GoAccess.getPrefs().autoHideTables : true;
 	},
 
+	compactDensity: function () {
+		return ('compactDensity' in GoAccess.getPrefs()) ? !!GoAccess.getPrefs().compactDensity : false;
+	},
+
 	hasTable: function (ui) {
 		ui['table'] = this.showTables();
 		ui['autoHideTables'] = this.autoHideTables();
+		ui['compactDensity'] = this.compactDensity();
 	},
 
 	getMetaRows: function (panel, ui, key) {
@@ -3178,6 +3266,101 @@ GoAccess.Tables = {
 		document.body.removeChild(a);
 		URL.revokeObjectURL(url);
 		GoAccess.Toast.show('Exported JSON for ' + (ui ? ui.head : panel), 'success', 2000);
+	},
+
+	copyMarkdown: function (panel) {
+		var fullData = (GoAccess.getPanelData(panel) || {}).data || [];
+		var filteredData = this.getFilteredData(panel, fullData);
+		var data = (filteredData && filteredData.length) ? filteredData : fullData;
+		var ui = GoAccess.getPanelUI(panel);
+		if (!data.length || !ui) return;
+
+		var headers = [];
+		var keys = [];
+		var aligns = [];
+		ui.items.forEach(function (it) {
+			if (!it.hide) {
+				headers.push(it.label);
+				keys.push(it.key);
+				aligns.push(it.dataType === 'string' ? ':---' : '---:');
+			}
+		});
+
+		var mdLines = [];
+		mdLines.push('| ' + headers.join(' | ') + ' |');
+		mdLines.push('| ' + aligns.join(' | ') + ' |');
+
+		var rowsToCopy = data.slice(0, 500);
+		rowsToCopy.forEach(function (row) {
+			var line = [];
+			keys.forEach(function (k) {
+				var val = row[k];
+				if (typeof val === 'object' && val !== null) val = val.count;
+				if (val === undefined || val === null) val = '';
+				line.push(String(val).replace(/\|/g, '\\|').replace(/[\r\n]+/g, ' '));
+			});
+			mdLines.push('| ' + line.join(' | ') + ' |');
+		});
+
+		var text = mdLines.join('\n');
+		this.copyToClipboard(text, 'Copied ' + rowsToCopy.length + ' rows as Markdown');
+	},
+
+	copyTSV: function (panel) {
+		var fullData = (GoAccess.getPanelData(panel) || {}).data || [];
+		var filteredData = this.getFilteredData(panel, fullData);
+		var data = (filteredData && filteredData.length) ? filteredData : fullData;
+		var ui = GoAccess.getPanelUI(panel);
+		if (!data.length || !ui) return;
+
+		var headers = [];
+		var keys = [];
+		ui.items.forEach(function (it) {
+			if (!it.hide) {
+				headers.push(it.label);
+				keys.push(it.key);
+			}
+		});
+
+		var tsvLines = [headers.join('\t')];
+		var rowsToCopy = data.slice(0, 500);
+		rowsToCopy.forEach(function (row) {
+			var line = [];
+			keys.forEach(function (k) {
+				var val = row[k];
+				if (typeof val === 'object' && val !== null) val = val.count;
+				if (val === undefined || val === null) val = '';
+				line.push(String(val).replace(/[\t\r\n]+/g, ' '));
+			});
+			tsvLines.push(line.join('\t'));
+		});
+
+		var text = tsvLines.join('\r\n');
+		this.copyToClipboard(text, 'Copied ' + rowsToCopy.length + ' rows as TSV');
+	},
+
+	copyToClipboard: function (text, successMsg) {
+		if (navigator.clipboard && navigator.clipboard.writeText) {
+			navigator.clipboard.writeText(text).then(function () {
+				GoAccess.Toast.show(successMsg, 'success', 2000);
+			}).catch(function () {
+				GoAccess.Toast.show('Clipboard copy blocked by browser', 'error', 2500);
+			});
+		} else {
+			var ta = document.createElement('textarea');
+			ta.value = text;
+			ta.style.position = 'fixed';
+			ta.style.opacity = '0';
+			document.body.appendChild(ta);
+			ta.select();
+			try {
+				document.execCommand('copy');
+				GoAccess.Toast.show(successMsg, 'success', 2000);
+			} catch (e) {
+				GoAccess.Toast.show('Clipboard copy failed', 'error', 2500);
+			}
+			document.body.removeChild(ta);
+		}
 	},
 
 	reloadTables: function () {
