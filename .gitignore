@@ -113,3 +113,5 @@ Makefile.in
 /resources/countries-110m.json.tmp
 /resources/cities-10m.json.tmp
 /resources/js/topojson.v3.min.js.tmp
+goaccess_report.sh
+*_report.html

@@ -44,15 +44,27 @@ window.GoAccess = window.GoAccess || {
 		this.AppTpls = {};
 		this.AppCharts = {};
 		this.AppUIData = (this.opts || {}).uiData || {};
+		// Reorder panel UI items so DATA dimension is always first (leftmost column)
+		for (var p in this.AppUIData) {
+			if (this.AppUIData[p] && Array.isArray(this.AppUIData[p].items)) {
+				var pItems = this.AppUIData[p].items;
+				var dIdx = pItems.findIndex(function (it) { return it.key === 'data'; });
+				if (dIdx > 0) {
+					var dItem = pItems.splice(dIdx, 1)[0];
+					dItem.colWidth = "auto";
+					pItems.unshift(dItem);
+				}
+			}
+		}
 		this.AppData = (this.opts || {}).panelData || {};
 		this.AppWSConn = (this.opts || {}).wsConnection || {};
 		this.i18n = (this.opts || {}).i18n || {};
 		this.AppPrefs = {
 			'autoHideTables': true,
-			'layout': cw > 2560 ? 'wide' : 'horizontal',
+			'layout': 'horizontal',
 			'panelOrder': [],
 			'perPage': 7,
-			'theme': (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'darkPurple' : 'bright',
+			'theme': (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'darkGray' : 'bright',
 			'hiddenPanels': [],
 		};
 		this.AppPrefs = GoAccess.Util.merge(this.AppPrefs, this.opts.prefs);
@@ -107,6 +119,16 @@ window.GoAccess = window.GoAccess || {
 		}
 	},
 
+	setStatusMessage: function (msg) {
+		var el = $('.app-loading-status > small');
+		if (el) el.innerHTML = msg;
+	},
+
+	hideSpinner: function () {
+		var el = $('.loading-container > .spinner') || $('.spinner');
+		if (el) el.style.display = 'none';
+	},
+
 	startMessageRotation: function () {
 		// Define the messages that will be displayed during the loading process
 		const messages = [
@@ -117,12 +139,11 @@ window.GoAccess = window.GoAccess || {
 			'Authorizing WebSocket session... Please wait.'
 		];
 		let currentMessageIndex = 0; // Tracks the index of the currently displayed message
-		// Set up an interval to rotate through the messages every 100ms
+		// Set up an interval to rotate through the messages
 		this.messageInterval = setInterval(() => {
 			if (currentMessageIndex < messages.length) {
-				// Update the loading status element with the current message
-				$('.app-loading-status > small').innerHTML = messages[currentMessageIndex];
-				currentMessageIndex++; // Move to the next message
+				this.setStatusMessage(messages[currentMessageIndex]);
+				currentMessageIndex++;
 			}
 		}, 500);
 	},
@@ -169,8 +190,7 @@ window.GoAccess = window.GoAccess || {
 	initializeWithoutWebSocket: function () {
 		// Stop the message rotation interval
 		clearInterval(this.messageInterval);
-		// Update the UI to indicate that no authentication is provided
-		$('.app-loading-status > small').innerHTML = 'No authentication provided.';
+		this.setStatusMessage('No authentication provided.');
 		// Proceed to initialize the app without WebSocket support
 		GoAccess.App.initialize();
 		this.isAppInitialized = true;
@@ -179,17 +199,14 @@ window.GoAccess = window.GoAccess || {
 	handleAuthenticationFailure: function (message) {
 		// Stop the message rotation interval
 		clearInterval(this.messageInterval);
-		// Update the UI to display the failure message
-		$('.app-loading-status > small').innerHTML = `Authentication failed: ${message}`;
-		// Hide the loading spinner
-		$('.loading-container > .spinner').style.display = 'none';
+		this.setStatusMessage(`Authentication failed: ${message}`);
+		this.hideSpinner();
 	},
 
 	handleAuthenticationError: function (error) {
 		// Stop the message rotation interval
 		clearInterval(this.messageInterval);
-		// Update the UI to indicate an error occurred during the JWT fetch process
-		$('.app-loading-status > small').innerHTML = 'Error fetching authentication token.';
+		this.setStatusMessage('Error fetching authentication token.');
 	},
 
 	getPanelUI: function (panel) {
@@ -368,7 +385,7 @@ window.GoAccess = window.GoAccess || {
 		socket.onopen = function (event) {
 			clearInterval(messageInterval);
 			if (this.currentJWT)
-				$('.app-loading-status > small').innerHTML = 'Authentication successful.';
+				this.setStatusMessage('Authentication successful.');
 
 			this.currDelay = this.wsDelay;
 			this.retries = 0;
@@ -393,8 +410,8 @@ window.GoAccess = window.GoAccess || {
 
 		socket.onclose = function (event) {
 			clearInterval(messageInterval);
-			$('.app-loading-status > small').innerHTML = 'Unable to authenticate WebSocket.';
-			$('.loading-container > .spinner').style.display = 'none';
+			this.setStatusMessage('Unable to authenticate WebSocket.');
+			this.hideSpinner();
 
 			GoAccess.Nav.WSClose();
 			window.clearInterval(pingId);
@@ -408,6 +425,13 @@ window.GoAccess = window.GoAccess || {
 // HELPERS
 GoAccess.Util = {
 	months: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul","Aug", "Sep", "Oct", "Nov", "Dec"],
+
+	// Escape a string for safe HTML interpolation
+	escapeHTML: function (s) {
+		return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+			return ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]);
+		});
+	},
 
 	// Add all attributes of n to o
 	merge: function (o, n) {
@@ -650,11 +674,275 @@ GoAccess.Util = {
 		GoAccess.Charts.initialize();
 		GoAccess.Tables.initialize();
 	},
+
+	// Copy string to clipboard with fallback
+	copyToClipboard: function (text, label) {
+		if (!text) return;
+		if (navigator.clipboard && window.isSecureContext) {
+			navigator.clipboard.writeText(text).then(function () {
+				GoAccess.Toast.show('Copied to clipboard: ' + (label || text), 'success');
+			}).catch(function () {
+				GoAccess.Util.fallbackCopy(text, label);
+			});
+		} else {
+			GoAccess.Util.fallbackCopy(text, label);
+		}
+	},
+
+	fallbackCopy: function (text, label) {
+		var textArea = document.createElement('textarea');
+		textArea.value = text;
+		textArea.style.position = 'fixed';
+		textArea.style.left = '-999999px';
+		textArea.style.top = '-999999px';
+		document.body.appendChild(textArea);
+		textArea.focus();
+		textArea.select();
+		try {
+			document.execCommand('copy');
+			GoAccess.Toast.show('Copied to clipboard: ' + (label || text), 'success');
+		} catch (err) {
+			GoAccess.Toast.show('Failed to copy', 'error');
+		}
+		document.body.removeChild(textArea);
+	}
+};
+
+// TOAST NOTIFICATIONS
+GoAccess.Toast = {
+	show: function (message, type, duration) {
+		duration = duration || 2500;
+		type = type || 'info';
+		var container = $('#toast-container');
+		if (!container) {
+			container = document.createElement('div');
+			container.id = 'toast-container';
+			container.className = 'toast-container';
+			document.body.appendChild(container);
+		}
+		var toast = document.createElement('div');
+		toast.className = 'toast toast-' + type;
+		var icon = type === 'success' ? 'fa-check-circle' : 'fa-info-circle';
+		toast.innerHTML = '<i class="fa ' + icon + ' toast-icon" aria-hidden="true"></i><span class="toast-msg">' + message + '</span>';
+		container.appendChild(toast);
+
+		requestAnimationFrame(function () {
+			toast.classList.add('toast-show');
+		});
+
+		setTimeout(function () {
+			toast.classList.remove('toast-show');
+			setTimeout(function () {
+				if (toast.parentNode) toast.parentNode.removeChild(toast);
+			}, 300);
+		}, duration);
+	}
+};
+
+// KEY INSIGHTS (frontend-only summary over existing window.json_data).
+// No new log fields or C aggregation: reads general + requests +
+// status_codes/not_found + browsers + vhosts/visit_time. Every insight
+// degrades to null when its source panel/field is absent.
+GoAccess.Insights = {
+	maxRows: 6,
+
+	num: function (v) {
+		var n = GoAccess.Util.getCount(v);
+		return GoAccess.Util.isNumeric(n) ? +n : 0;
+	},
+
+	topBy: function (rows, fn, n) {
+		rows = (rows || []).slice();
+		rows.sort(function (a, b) { return fn(b) - fn(a); });
+		return rows.slice(0, n || 1);
+	},
+
+	sumHits: function (rows) {
+		var t = 0;
+		(rows || []).forEach(function (r) { t += GoAccess.Insights.num(r.hits); });
+		return t;
+	},
+
+	esc: function (s) {
+		return GoAccess.Util.escapeHTML(s);
+	},
+
+	fmtURL: function (url, max) {
+		url = String(url == null ? '' : url);
+		max = max || 60;
+		var short = url.length > max ? url.slice(0, max - 1) + '…' : url;
+		return this.esc(short);
+	},
+
+	slowest: function () {
+		var rows = GoAccess.getPanelData('requests');
+		rows = rows && rows.data ? rows.data : [];
+		rows = rows.filter(function (r) { return GoAccess.Insights.num(r.avgts) > 0; });
+		var top = this.topBy(rows, function (r) { return GoAccess.Insights.num(r.avgts); }, 1)[0];
+		if (!top) return null;
+		return {
+			label: 'Slowest endpoint (avg)',
+			value: this.fmtURL(top.data) + ' · ' + GoAccess.Util.fmtValue(this.num(top.avgts), 'utime'),
+			sub: this.num(top.hits).toLocaleString() + ' hits · max ' + GoAccess.Util.fmtValue(this.num(top.maxts), 'utime'),
+			tone: this.num(top.avgts) >= 1E6 ? 'warn' : '',
+		};
+	},
+
+	bandwidthHog: function () {
+		var rows = GoAccess.getPanelData('requests');
+		rows = rows && rows.data ? rows.data : [];
+		rows = rows.filter(function (r) { return GoAccess.Insights.num(r.bytes) > 0; });
+		var top = this.topBy(rows, function (r) { return GoAccess.Insights.num(r.bytes); }, 1)[0];
+		if (!top) return null;
+		var pct = GoAccess.Util.getPercent(top.bytes);
+		return {
+			label: 'Top bandwidth URL',
+			value: this.fmtURL(top.data) + ' · ' + GoAccess.Util.fmtValue(this.num(top.bytes), 'bytes'),
+			sub: pct ? pct + ' of served bytes' : this.num(top.hits).toLocaleString() + ' hits',
+			tone: '',
+		};
+	},
+
+	errors: function (general) {
+		var rows = GoAccess.getPanelData('status_codes');
+		rows = rows && rows.data ? rows.data : [];
+		var serverErr = 0, total = 0;
+		rows.forEach(function (r) {
+			var h = GoAccess.Insights.num(r.hits);
+			total += h;
+			if (/^5xx/.test(String(r.data))) serverErr += h;
+		});
+		if (!total) return null;
+		var share = total ? (100 * serverErr / total) : 0;
+		var nf = GoAccess.getPanelData('not_found');
+		nf = nf && nf.data ? nf.data : [];
+		var top404 = this.topBy(nf, function (r) { return GoAccess.Insights.num(r.hits); }, 1)[0];
+		return {
+			label: 'Server errors (5xx share)',
+			value: share.toFixed(1) + '% of classified hits (' + serverErr.toLocaleString() + ')',
+			sub: top404 ? 'Top 404: ' + this.fmtURL(top404.data) + ' (' + this.num(top404.hits).toLocaleString() + ' hits)' : null,
+			tone: share >= 5 ? 'danger' : (share >= 1 ? 'warn' : 'ok'),
+		};
+	},
+
+	bots: function () {
+		var rows = GoAccess.getPanelData('browsers');
+		rows = rows && rows.data ? rows.data : [];
+		var botHits = 0, total = this.sumHits(rows);
+		rows.forEach(function (r) {
+			if (/crawler/i.test(String(r.data))) botHits += this.num(r.hits);
+		}, this);
+		if (!total) return null;
+		var share = 100 * botHits / total;
+		return {
+			label: 'Crawler share',
+			value: share.toFixed(1) + '% of browser-classified hits',
+			sub: botHits.toLocaleString() + ' crawler hits',
+			tone: share >= 30 ? 'warn' : '',
+		};
+	},
+
+	vhostConcentration: function () {
+		var rows = GoAccess.getPanelData('vhosts');
+		rows = rows && rows.data ? rows.data : [];
+		rows = rows.filter(function (r) { return String(r.data) !== 'UNKNOWN'; });
+		var top = this.topBy(rows, function (r) { return GoAccess.Insights.num(r.hits); }, 1)[0];
+		if (!top) return null;
+		var pct = GoAccess.Util.getPercent(top.hits);
+		return {
+			label: 'Top virtual host',
+			value: this.esc(String(top.data)) + (pct ? ' · ' + pct : ''),
+			sub: this.num(top.hits).toLocaleString() + ' hits',
+			tone: '',
+		};
+	},
+
+	peakHour: function () {
+		var rows = GoAccess.getPanelData('visit_time');
+		rows = rows && rows.data ? rows.data : [];
+		var top = this.topBy(rows, function (r) { return GoAccess.Insights.num(r.hits); }, 1)[0];
+		if (!top) return null;
+		return {
+			label: 'Peak hour',
+			value: this.esc(String(top.data)) + ':00 · ' + this.num(top.hits).toLocaleString() + ' hits',
+			sub: null,
+			tone: '',
+		};
+	},
+
+	build: function (general) {
+		var out = [];
+		[g => this.slowest(), g => this.bandwidthHog(), g => this.errors(g), g => this.bots(), g => this.vhostConcentration(), g => this.peakHour()].forEach(function (fn) {
+			try {
+				var item = fn(general);
+				if (item) out.push(item);
+			} catch (e) { /* degrade silently per insight */ }
+		});
+		return out.slice(0, this.maxRows);
+	},
+
+	// Log-format coverage: which optional fields actually produced data.
+	// Shown as a muted banner so legacy logs explain degraded insights.
+	// Percentages are hits-weighted estimates from aggregated panels
+	// (panels may be top-N truncated), not exact per-line counts.
+	coverage: function () {
+		var general = GoAccess.getPanelData('general') || {};
+		var total = this.num(general.valid_requests) || this.num(general.total_requests) || 0;
+		var parts = [];
+		var vhosts = GoAccess.getPanelData('vhosts');
+		vhosts = vhosts && vhosts.data ? vhosts.data : [];
+		var unknownHits = 0, vhostHits = 0;
+		vhosts.forEach(function (r) {
+			var h = GoAccess.Insights.num(r.hits);
+			vhostHits += h;
+			if (String(r.data) === 'UNKNOWN') unknownHits += h;
+		});
+		var vhostPct = vhostHits > 0 ? Math.round(100 * (vhostHits - unknownHits) / vhostHits) : null;
+		parts.push({key: 'vhost (%v)', ok: vhostPct != null && vhostPct > 0, pct: vhostPct});
+		var req = GoAccess.getPanelData('requests');
+		req = req && req.data ? req.data : [];
+		var timedHits = 0, byteHits = 0, reqHits = 0;
+		req.forEach(function (r) {
+			var h = GoAccess.Insights.num(r.hits);
+			reqHits += h;
+			if (GoAccess.Insights.num(r.avgts) > 0 || GoAccess.Insights.num(r.cumts) > 0) timedHits += h;
+			if (GoAccess.Insights.num(r.bytes) > 0) byteHits += h;
+		});
+		parts.push({key: 'timing (%T)', ok: timedHits > 0, pct: reqHits > 0 ? Math.round(100 * timedHits / reqHits) : null});
+		parts.push({key: 'bytes (%b)', ok: byteHits > 0, pct: reqHits > 0 ? Math.round(100 * byteHits / reqHits) : null});
+		var br = GoAccess.getPanelData('browsers');
+		br = br && br.data ? br.data : [];
+		var brTotal = this.sumHits(br), brUnknown = 0;
+		br.forEach(function (r) {
+			if (String(r.data) === 'Unknown' || String(r.data) === 'Others') brUnknown += this.num(r.hits);
+		}, this);
+		parts.push({key: 'agent (%u)', ok: brTotal > 0 && (brTotal - brUnknown) > 0, pct: brTotal > 0 ? Math.round(100 * (brTotal - brUnknown) / brTotal) : null});
+		if (total) parts.total = total;
+		return parts;
+	},
 };
 
 // OVERALL STATS
 GoAccess.OverallStats = {
 	total_requests: 0,
+
+	getStatIcon: function (key) {
+		var map = {
+			'total_requests': 'server',
+			'valid_requests': 'check-circle-o',
+			'failed_requests': 'times-circle-o',
+			'generation_time': 'clock-o',
+			'unique_visitors': 'users',
+			'unique_files': 'file-text-o',
+			'excluded_hits': 'ban',
+			'unique_referrers': 'external-link',
+			'unique_not_found': 'exclamation-triangle',
+			'unique_static_files': 'file-code-o',
+			'log_size': 'hdd-o',
+			'bandwidth': 'exchange'
+		};
+		return map[key] || 'bar-chart';
+	},
 
 	// Render each overall stats box
 	renderBox: function (data, ui, row, x, idx) {
@@ -673,6 +961,7 @@ GoAccess.OverallStats = {
 			'className': ui.items[x].className,
 			'label': ui.items[x].label,
 			'value': value,
+			'icon': this.getStatIcon(x)
 		});
 
 		return wrap;
@@ -691,6 +980,9 @@ GoAccess.OverallStats = {
 		$('#overall').innerHTML = GoAccess.AppTpls.General.wrap.render(GoAccess.Util.merge(ui, {
 			'from': data.start_date,
 			'to': data.end_date,
+			'meta': this.renderMeta(data),
+			'insights': GoAccess.Insights.build(data),
+			'coverage': this.renderCoverage(),
 		}));
 		$('#overall').setAttribute('aria-labelledby', 'overall-heading');
 
@@ -701,6 +993,31 @@ GoAccess.OverallStats = {
 			row = this.renderBox(data, ui, row, x, idx);
 			idx++;
 		}
+	},
+
+	// One-line provenance: generated at, log source, log size.
+	renderMeta: function (data) {
+		var bits = [];
+		if (data.date_time) bits.push('Generated ' + GoAccess.Util.escapeHTML(String(data.date_time)));
+		if (data.log_path && data.log_path.length)
+			bits.push('Source: ' + GoAccess.Util.escapeHTML([].concat(data.log_path).join(', ')));
+		if (data.log_size != null) bits.push('Log size: ' + GoAccess.Util.fmtValue(data.log_size, 'bytes'));
+		if (data.generation_time != null) bits.push('Parsed in ' + GoAccess.Util.fmtValue(data.generation_time, 'secs'));
+		return bits.join(' &middot; ');
+	},
+
+	// Coverage banner: which optional log fields produced data.
+	renderCoverage: function () {
+		var parts = GoAccess.Insights.coverage();
+		var fmt = function (p) {
+			var label = GoAccess.Util.escapeHTML(p.key);
+			if (p.pct != null) label += ' ~' + p.pct + '% of hits';
+			return (p.ok ? '✓ ' : '✗ ') + label;
+		};
+		var missing = parts.filter(function (p) { return !p.ok; });
+		var summary = parts.map(fmt).join(' &middot; ');
+		if (!missing.length) return 'Log coverage (est.): ' + summary + '.';
+		return 'Log coverage (est.): ' + summary + ' &mdash; related insights hidden, rows preserved.';
 	},
 
 	// Render general/overall analyzed requests.
@@ -715,25 +1032,74 @@ GoAccess.OverallStats = {
 
 // RENDER PANELS
 GoAccess.Nav = {
+	currentDrawer: null,
+
+	open: function (type, e) {
+		if (e) e.stopPropagation();
+		if ($('nav').classList.contains('active') && this.currentDrawer === type) {
+			this.close();
+			return;
+		}
+		this.currentDrawer = type;
+		if (type === 'opts') {
+			this.renderOptsContent();
+		} else {
+			this.renderMenuContent();
+		}
+		$('nav').classList.add('active');
+		document.body.classList.add('has-nav-open');
+	},
+
+	close: function () {
+		$('nav').classList.remove('active');
+		document.body.classList.remove('has-nav-open');
+		this.currentDrawer = null;
+	},
+
 	events: function () {
 		$('.nav-bars').onclick = function (e) {
 			e.stopPropagation();
-			this.renderMenu(e);
+			this.open('menu', e);
 		}.bind(this);
 
 		$('.nav-gears').onclick = function (e) {
 			e.stopPropagation();
-			this.renderOpts(e);
+			this.open('opts', e);
 		}.bind(this);
 
-		$('.nav-minibars').onclick = function (e) {
+		if ($('.nav-minibars')) {
+			$('.nav-minibars').onclick = function (e) {
+				e.stopPropagation();
+				this.open('opts', e);
+			}.bind(this);
+		}
+
+		// Close button inside sidebar
+		$$('.nav-close-btn, .nav-close', function (btn) {
+			btn.onclick = function (e) {
+				e.stopPropagation();
+				this.close();
+			}.bind(this);
+		}.bind(this));
+
+		// Prevent clicks inside sidebar from closing it prematurely
+		$('nav').onclick = function (e) {
 			e.stopPropagation();
-			this.renderOpts(e);
+		};
+
+		// Document click outside sidebar closes it
+		document.onclick = function (e) {
+			if ($('nav').classList.contains('active') && !e.target.closest('nav') && !e.target.closest('.nav-bars') && !e.target.closest('.nav-gears')) {
+				this.close();
+			}
 		}.bind(this);
 
-		$('body').onclick = function (e) {
-			$('nav').classList.remove('active');
-		}.bind(this);
+		// Escape key closes sidebar
+		window.addEventListener('keydown', function (e) {
+			if (e.key === 'Escape' && $('nav').classList.contains('active')) {
+				this.close();
+			}
+		}.bind(this));
 
 		$$('.export-json', function (item) {
 			item.onclick = function (e) {
@@ -765,19 +1131,19 @@ GoAccess.Nav = {
 			}.bind(this);
 		}.bind(this));
 
-		$$('.layout-horizontal', function (item) {
+		$$('a.layout-horizontal', function (item) {
 			item.onclick = function (e) {
 				this.setLayout('horizontal');
 			}.bind(this);
 		}.bind(this));
 
-		$$('.layout-vertical', function (item) {
+		$$('a.layout-vertical', function (item) {
 			item.onclick = function (e) {
 				this.setLayout('vertical');
 			}.bind(this);
 		}.bind(this));
 
-		$$('.layout-wide', function (item) {
+		$$('a.layout-wide', function (item) {
 			item.onclick = function (e) {
 				this.setLayout('wide');
 			}.bind(this);
@@ -915,14 +1281,15 @@ GoAccess.Nav = {
 		targ.download = 'goaccess-' + (+new Date()) + '.json';
 	},
 
-	setLayout: function (layout) {
-		if (('horizontal' == layout || 'wide' == layout) && $('.container')) {
-			$('.container').classList.add('container-fluid');
-			$('.container').classList.remove('container');
-		} else if ('vertical' == layout && $('.container-fluid')) {
-			$('.container-fluid').classList.add('container');
-			$('.container').classList.remove('container-fluid');
+	refreshOptsIfOpen: function () {
+		if ($('nav')?.classList.contains('active') && this.currentDrawer === 'opts') {
+			this.renderOptsContent();
 		}
+	},
+
+	setLayout: function (layout) {
+		document.body.classList.remove('layout-horizontal', 'layout-wide', 'layout-vertical');
+		document.body.classList.add('layout-' + layout);
 
 		GoAccess.AppPrefs['layout'] = layout;
 		GoAccess.setPrefs();
@@ -930,6 +1297,8 @@ GoAccess.Nav = {
 		GoAccess.Panels.initialize();
 		GoAccess.Charts.initialize();
 		GoAccess.Tables.initialize();
+
+		this.refreshOptsIfOpen();
 	},
 
 	toggleAutoHideTables: function (e) {
@@ -944,6 +1313,8 @@ GoAccess.Nav = {
 
 		GoAccess.AppPrefs['autoHideTables'] = !autoHideTables;
 		GoAccess.setPrefs();
+
+		this.refreshOptsIfOpen();
 	},
 
 	toggleTables: function () {
@@ -960,6 +1331,8 @@ GoAccess.Nav = {
 		GoAccess.Panels.initialize();
 		GoAccess.Charts.initialize();
 		GoAccess.Tables.initialize();
+
+		this.refreshOptsIfOpen();
 	},
 
 	setTheme: function (theme) {
@@ -969,25 +1342,29 @@ GoAccess.Nav = {
 		$('html').className = '';
 		switch(theme) {
 		case 'darkGray':
-			document.querySelector('meta[name="theme-color"]')?.setAttribute('content', '#212121');
+			document.querySelector('meta[name="theme-color"]')?.setAttribute('content', '#09090b');
 			$('html').classList.add('dark');
 			$('html').classList.add('gray');
 			break;
 		case 'darkBlue':
-			document.querySelector('meta[name="theme-color"]')?.setAttribute('content', '#252B30');
+			document.querySelector('meta[name="theme-color"]')?.setAttribute('content', '#0b1120');
 			$('html').classList.add('dark');
 			$('html').classList.add('blue');
 			break;
 		case 'darkPurple':
-			document.querySelector('meta[name="theme-color"]')?.setAttribute('content', '#1e1e2f');
+			document.querySelector('meta[name="theme-color"]')?.setAttribute('content', '#0f0b1e');
 			$('html').classList.add('dark');
 			$('html').classList.add('purple');
 			break;
 		default:
-			document.querySelector('meta[name="theme-color"]')?.setAttribute('content', '#f0f0f0');
+			document.querySelector('meta[name="theme-color"]')?.setAttribute('content', '#f8fafc');
+			$('html').classList.add('bright');
+			break;
 		}
 		GoAccess.AppPrefs['theme'] = theme;
 		GoAccess.setPrefs();
+
+		this.refreshOptsIfOpen();
 	},
 
 	getIcon: function (key) {
@@ -1063,6 +1440,7 @@ GoAccess.Nav = {
 		GoAccess.setPrefs();
 
 		GoAccess.Tables.initialize();
+		this.refreshOptsIfOpen();
 	},
 
 	getTheme: function () {
@@ -1078,7 +1456,10 @@ GoAccess.Nav = {
 	},
 
 	// Render left-hand side navigation options.
-	renderOpts: function () {
+	renderOptsContent: function () {
+		var navList = $('.nav-list');
+		if (!navList) return;
+
 		var o = {};
 		o[this.getLayout()] = true;
 		o[this.getTheme()] = true;
@@ -1087,25 +1468,30 @@ GoAccess.Nav = {
 		o['showTables'] = GoAccess.Tables.showTables();
 		o['labels'] = GoAccess.i18n;
 
-		$('.nav-list').innerHTML = GoAccess.AppTpls.Nav.opts.render(o);
-		requestAnimationFrame(function () {
-			$('nav').classList.toggle('active');
-		});
+		navList.innerHTML = GoAccess.AppTpls.Nav.opts.render(o);
 		this.events();
 	},
 
+	renderOpts: function (e) {
+		this.open('opts', e);
+	},
+
 	// Render left-hand side navigation given the available panels.
-	renderMenu: function (e) {
-		$('.nav-list').innerHTML = GoAccess.AppTpls.Nav.menu.render({
+	renderMenuContent: function () {
+		var navList = $('.nav-list');
+		if (!navList) return;
+
+		navList.innerHTML = GoAccess.AppTpls.Nav.menu.render({
 			'nav': this.getItems(),
 			'overall_current': window.location.hash.substr(1) == '',
 			'overall_hidden': GoAccess.Util.isPanelHidden('general'),
 			'labels': GoAccess.i18n,
 		});
-		requestAnimationFrame(function () {
-			$('nav').classList.toggle('active');
-		});
 		this.events();
+	},
+
+	renderMenu: function (e) {
+		this.open('menu', e);
 	},
 
 	WSStatus: function () {
@@ -1139,8 +1525,8 @@ GoAccess.Nav = {
 
 	// Iterate over all available panels and render each.
 	initialize: function () {
-		this.setTheme(GoAccess.AppPrefs.theme);
 		this.renderWrap();
+		this.setTheme(GoAccess.AppPrefs.theme);
 		this.WSStatus();
 		this.events();
 	}
@@ -1151,54 +1537,240 @@ GoAccess.Panels = {
 	events: function () {
 		$$('[data-toggle=dropdown]', function (item) {
 			item.onclick = function (e) {
-				this.openOpts(e.currentTarget);
+				if (e && e.preventDefault) e.preventDefault();
+				if (e && e.stopPropagation) e.stopPropagation();
+				// Keyboard-triggered clicks (Enter/Space) report detail === 0:
+				// move focus into the menu so it is operable without a mouse.
+				var viaKeyboard = e && e.detail === 0;
+				this.toggleOpts(e.currentTarget, viaKeyboard);
 			}.bind(this);
-			item.onblur = function (e) {
-				this.closeOpts(e);
+			item.onblur = null;
+			item.onkeydown = function (e) {
+				var key = e.key;
+				if (key === 'ArrowDown' || key === 'Down') {
+					if (e.preventDefault) e.preventDefault();
+					if (e.stopPropagation) e.stopPropagation();
+					this.openOpts(e.currentTarget, true);
+				} else if (key === 'ArrowUp' || key === 'Up') {
+					if (e.preventDefault) e.preventDefault();
+					if (e.stopPropagation) e.stopPropagation();
+					this.openOpts(e.currentTarget, 'last');
+				}
+			}.bind(this);
+		}.bind(this));
+		this.bindGlobalOptsCloser();
+		this.bindOptsMenuKeys();
+
+		$$('.panel-focus-btn', function (item) {
+			item.onclick = function (e) {
+				e.stopPropagation();
+				var p = e.currentTarget.getAttribute('data-panel');
+				this.toggleFocus(p);
 			}.bind(this);
 		}.bind(this));
 
 		$$('[data-plot]', function (item) {
 			item.onclick = function (e) {
+				if (e && e.preventDefault) e.preventDefault();
+				if (e && e.stopPropagation) e.stopPropagation();
 				GoAccess.Charts.redrawChart(e.currentTarget);
 			}.bind(this);
 		}.bind(this));
 
 		$$('[data-chart]', function (item) {
 			item.onclick = function (e) {
+				if (e && e.preventDefault) e.preventDefault();
+				if (e && e.stopPropagation) e.stopPropagation();
 				GoAccess.Charts.toggleChart(e.currentTarget);
 			}.bind(this);
 		}.bind(this));
 
 		$$('[data-chart-type]', function (item) {
 			item.onclick = function (e) {
+				if (e && e.preventDefault) e.preventDefault();
+				if (e && e.stopPropagation) e.stopPropagation();
 				GoAccess.Charts.setChartType(e.currentTarget);
 			}.bind(this);
 		}.bind(this));
 
 		$$('[data-metric]', function (item) {
 			item.onclick = function (e) {
+				if (e && e.preventDefault) e.preventDefault();
+				if (e && e.stopPropagation) e.stopPropagation();
 				GoAccess.Tables.toggleColumn(e.currentTarget);
 			}.bind(this);
 		}.bind(this));
+
+		$$('.panel-export-csv', function (item) {
+			item.onclick = function (e) {
+				if (e && e.preventDefault) e.preventDefault();
+				e.stopPropagation();
+				var panel = e.currentTarget.getAttribute('data-panel');
+				GoAccess.Tables.downloadCSV(panel);
+			};
+		});
+
+		$$('.panel-export-json', function (item) {
+			item.onclick = function (e) {
+				if (e && e.preventDefault) e.preventDefault();
+				e.stopPropagation();
+				var panel = e.currentTarget.getAttribute('data-panel');
+				GoAccess.Tables.downloadPanelJSON(panel);
+			};
+		});
 	},
 
-	openOpts: function (targ) {
+	toggleFocus: function (panel) {
+		var box = $('#panel-' + panel);
+		if (!box) return;
+		var article = box.closest('article');
+		if (!article) return;
+
+		var isFocused = article.classList.contains('panel-focused');
+
+		// Clear any existing focus
+		$$('article.panel-focused', function (el) {
+			el.classList.remove('panel-focused');
+			var icon = el.querySelector('.panel-focus-btn i');
+			if (icon) {
+				icon.classList.remove('fa-compress');
+				icon.classList.add('fa-arrows-alt');
+			}
+		});
+		document.body.classList.remove('has-panel-focused');
+
+		if (!isFocused) {
+			article.classList.add('panel-focused');
+			document.body.classList.add('has-panel-focused');
+			var icon = article.querySelector('.panel-focus-btn i');
+			if (icon) {
+				icon.classList.remove('fa-arrows-alt');
+				icon.classList.add('fa-compress');
+			}
+			GoAccess.Toast.show('Entered focus mode (Esc to exit)', 'info', 1800);
+		}
+
+		if (GoAccess.AppCharts[panel]) {
+			setTimeout(function () {
+				GoAccess.Charts.reloadChart(GoAccess.AppCharts[panel], panel);
+			}, 50);
+		}
+	},
+
+	openOpts: function (targ, focusMenu) {
+		if (!targ || !targ.parentElement) return;
 		var panel = targ.getAttribute('data-panel');
-    targ.setAttribute('aria-expanded', 'true');
-		targ.parentElement.classList.toggle('open');
+		targ.setAttribute('aria-expanded', 'true');
+		targ.parentElement.classList.add('open');
 		this.renderOpts(panel);
+		if (focusMenu) this.focusMenuItem(panel, focusMenu === 'last' ? 'last' : 'first');
 	},
 
-	closeOpts: function (e) {
-		e.currentTarget.parentElement.classList.remove('open');
-    e.currentTarget.parentElement.querySelector('[aria-expanded]').setAttribute('aria-expanded', 'false');
-		// Trigger the click event on the target if not opening another menu
-		if (e.relatedTarget && e.relatedTarget.getAttribute('data-toggle') !== 'dropdown')
-			e.relatedTarget.click();
+	closeOpts: function (targ, refocus) {
+		var btn = targ && targ.getAttribute ? targ : (targ && targ.currentTarget);
+		if (!btn || !btn.parentElement) return;
+		btn.parentElement.classList.remove('open');
+		var expanded = btn.parentElement.querySelector('[aria-expanded]');
+		if (expanded) expanded.setAttribute('aria-expanded', 'false');
+		if (refocus && btn.focus) btn.focus();
+	},
+
+	closeAllOpts: function (except, refocus) {
+		var self = this;
+		$$('[data-toggle=dropdown]', function (item) {
+			if (item !== except) self.closeOpts(item);
+		});
+		if (refocus && except && except.focus) except.focus();
+	},
+
+	toggleOpts: function (targ, focusMenu) {
+		if (!targ || !targ.parentElement) return;
+		var isOpen = targ.parentElement.classList.contains('open');
+		this.closeAllOpts(targ);
+		if (isOpen) {
+			this.closeOpts(targ);
+		} else {
+			this.openOpts(targ, focusMenu);
+		}
+	},
+
+	getMenuLinks: function (panel) {
+		var menu = $('.panel-opts-' + panel);
+		if (!menu) return [];
+		return Array.prototype.filter.call(menu.querySelectorAll('a[href]'), function (a) {
+			return a.offsetParent !== null || a.getClientRects().length > 0;
+		});
+	},
+
+	focusMenuItem: function (panel, which) {
+		var links = this.getMenuLinks(panel);
+		if (!links.length) return;
+		var el = which === 'last' ? links[links.length - 1] : links[0];
+		if (el && el.focus) el.focus();
+	},
+
+	bindOptsMenuKeys: function () {
+		var self = this;
+		$$('.dropdown-menu[class*="panel-opts-"]', function (menu) {
+			if (menu._optsKeysBound) return;
+			menu._optsKeysBound = true;
+			menu.onkeydown = function (e) {
+				var link = e.target && e.target.closest ? e.target.closest('a[href]') : null;
+				if (!link) return;
+				var panel = link.getAttribute('data-panel');
+				var links = self.getMenuLinks(panel);
+				var idx = links.indexOf(link);
+				if (e.key === 'ArrowDown' || e.key === 'Down') {
+					if (e.preventDefault) e.preventDefault();
+					if (e.stopPropagation) e.stopPropagation();
+					var next = links[(idx + 1) % links.length];
+					if (next && next.focus) next.focus();
+				} else if (e.key === 'ArrowUp' || e.key === 'Up') {
+					if (e.preventDefault) e.preventDefault();
+					if (e.stopPropagation) e.stopPropagation();
+					var prev = links[(idx - 1 + links.length) % links.length];
+					if (prev && prev.focus) prev.focus();
+				} else if (e.key === 'Home') {
+					if (e.preventDefault) e.preventDefault();
+					if (links[0] && links[0].focus) links[0].focus();
+				} else if (e.key === 'End') {
+					if (e.preventDefault) e.preventDefault();
+					var last = links[links.length - 1];
+					if (last && last.focus) last.focus();
+				} else if (e.key === 'Tab') {
+					// Let Tab move naturally out of the menu, then close it.
+					var btn = document.querySelector('[data-toggle=dropdown][data-panel="' + panel + '"]');
+					setTimeout(function () { self.closeOpts(btn); }, 0);
+				}
+			};
+		});
+	},
+
+	bindGlobalOptsCloser: function () {
+		if (this._optsCloserBound) return;
+		this._optsCloserBound = true;
+		var self = this;
+		document.addEventListener('click', function (e) {
+			if (e.target && e.target.closest && e.target.closest('.dropdown'))
+				return;
+			self.closeAllOpts(null);
+		}, true);
+		document.addEventListener('keydown', function (e) {
+			if (e.key === 'Escape') {
+				var open = document.querySelector('.dropdown.open [data-toggle=dropdown]');
+				self.closeAllOpts(null);
+				if (open && open.focus) open.focus();
+			}
+		}, true);
+		document.addEventListener('focusin', function (e) {
+			if (e.target && e.target.closest && e.target.closest('.dropdown'))
+				return;
+			self.closeAllOpts(null);
+		}, true);
 	},
 
 	setPlotSelection: function (ui, prefs) {
+		if (!ui.plot || !ui.plot.length) return;
 		var chartType = ((prefs || {}).plot || {}).chartType || ui.plot[0].chartType;
 		var metric = ((prefs || {}).plot || {}).metric || ui.plot[0].className;
 
@@ -1221,6 +1793,8 @@ GoAccess.Panels = {
 
 	setOpts: function (panel) {
 		var ui = JSON.parse(JSON.stringify(GoAccess.getPanelUI(panel))), prefs = GoAccess.getPrefs(panel);
+		if (!ui.plot) ui.plot = [];
+		if (!ui.items) ui.items = [];
 		// set preferences selection upon opening panel options
 		this.setChartSelection(ui, prefs);
 		this.setPlotSelection(ui, prefs);
@@ -1229,56 +1803,79 @@ GoAccess.Panels = {
 	},
 
 	renderOpts: function (panel) {
-		$('.panel-opts-' + panel).innerHTML = GoAccess.AppTpls.Panels.opts.render(this.setOpts(panel));
+		var menu = $('.panel-opts-' + panel);
+		if (!menu) return;
+		try {
+			menu.innerHTML = GoAccess.AppTpls.Panels.opts.render(this.setOpts(panel));
+		} catch (e) {
+			if (window.console && console.error) console.error('renderOpts failed for panel ' + panel, e);
+			return;
+		}
 		this.events();
 	},
 
 	enablePrev: function (panel) {
 		var $pagination = $('#panel-' + panel + ' .pagination a.panel-prev');
-		if ($pagination)
+		if ($pagination) {
 			$pagination.parentNode.classList.remove('disabled');
+			$pagination.setAttribute('aria-disabled', 'false');
+		}
 	},
 
 	disablePrev: function (panel) {
 		var $pagination = $('#panel-' + panel + ' .pagination a.panel-prev');
-		if ($pagination)
+		if ($pagination) {
 			$pagination.parentNode.classList.add('disabled');
+			$pagination.setAttribute('aria-disabled', 'true');
+		}
 	},
 
 	enableNext: function (panel) {
 		var $pagination = $('#panel-' + panel + ' .pagination a.panel-next');
-		if ($pagination)
+		if ($pagination) {
 			$pagination.parentNode.classList.remove('disabled');
+			$pagination.setAttribute('aria-disabled', 'false');
+		}
 	},
 
 	disableNext: function (panel) {
 		var $pagination = $('#panel-' + panel + ' .pagination a.panel-next');
-		if ($pagination)
+		if ($pagination) {
 			$pagination.parentNode.classList.add('disabled');
+			$pagination.setAttribute('aria-disabled', 'true');
+		}
 	},
 
 	enableFirst: function (panel) {
 		var $pagination = $('#panel-' + panel + ' .pagination a.panel-first');
-		if ($pagination)
+		if ($pagination) {
 			$pagination.parentNode.classList.remove('disabled');
+			$pagination.setAttribute('aria-disabled', 'false');
+		}
 	},
 
 	disableFirst: function (panel) {
 		var $pagination = $('#panel-' + panel + ' .pagination a.panel-first');
-		if ($pagination)
+		if ($pagination) {
 			$pagination.parentNode.classList.add('disabled');
+			$pagination.setAttribute('aria-disabled', 'true');
+		}
 	},
 
 	enableLast: function (panel) {
 		var $pagination = $('#panel-' + panel + ' .pagination a.panel-last');
-		if ($pagination)
+		if ($pagination) {
 			$pagination.parentNode.classList.remove('disabled');
+			$pagination.setAttribute('aria-disabled', 'false');
+		}
 	},
 
 	disableLast: function (panel) {
 		var $pagination = $('#panel-' + panel + ' .pagination a.panel-last');
-		if ($pagination)
+		if ($pagination) {
 			$pagination.parentNode.classList.add('disabled');
+			$pagination.setAttribute('aria-disabled', 'true');
+		}
 	},
 
 	enablePagination: function (panel) {
@@ -1338,32 +1935,13 @@ GoAccess.Panels = {
 		return col;
 	},
 
-	createCol: function (row) {
-		var layout = GoAccess.AppPrefs['layout'];
-		var perRow = 'horizontal' == layout ? 6 : 'wide' == layout ? 3 : 12;
-
-		// set the number of columns based on current layout
+	createCol: function (panel) {
+		var isHero = (panel === 'visitors');
 		var col = document.createElement('article');
-		col.setAttribute('class', 'col-md-' + perRow);
-		row.appendChild(col);
+		col.setAttribute('class', 'panel-col panel-' + panel + (isHero ? ' panel-hero' : ''));
+		$('#panels').appendChild(col);
 
 		return col;
-	},
-
-	createRow: function (row, idx) {
-		var wrap = $('#panels');
-		var layout = GoAccess.AppPrefs['layout'];
-		var every = 'horizontal' == layout ? 2 : 'wide' == layout ? 4 : 1;
-
-		// create a new bootstrap row every one or two elements depending on
-		// the layout
-		if (idx % every == 0) {
-			row = document.createElement('div');
-			row.setAttribute('class', 'row' + (every == 2 || every == 4 ? ' equal' : ''));
-			wrap.appendChild(row);
-		}
-
-		return row;
 	},
 
 	resetPanel: function (panel) {
@@ -1381,10 +1959,9 @@ GoAccess.Panels = {
 		this.events();
 	},
 
-	// Iterate over all available panels and render each panel
-	// structure.
+	// Iterate over all available panels and render each panel structure.
 	renderPanels: function () {
-		var ui = GoAccess.getPanelUI(), idx = 0, row = null, col = null;
+		var ui = GoAccess.getPanelUI(), col = null;
 		var order = GoAccess.AppPrefs.panelOrder || [];
 
 		clearMapFullscreen(d3.select('.' + MAP_FULLSCREEN_CLASS));
@@ -1407,8 +1984,7 @@ GoAccess.Panels = {
 			if (GoAccess.Util.isPanelValid(panel) || GoAccess.Util.isPanelHidden(panel))
 				continue;
 
-			row = this.createRow(row, idx++);
-			col = this.createCol(row);
+			col = this.createCol(panel);
 			this.renderPanel(panel, ui[panel], col);
 		}
 
@@ -1417,8 +1993,7 @@ GoAccess.Panels = {
 			if (GoAccess.Util.isPanelValid(panel) || GoAccess.Util.isPanelHidden(panel))
 				continue;
 			if (!order.includes(panel)) {
-				row = this.createRow(row, idx++);
-				col = this.createCol(row);
+				col = this.createCol(panel);
 				this.renderPanel(panel, ui[panel], col);
 				order.push(panel);
 			}
@@ -1769,6 +2344,47 @@ GoAccess.Charts = {
 GoAccess.Tables = {
 	chartData: {}, // holds all panel sub items data that feeds the chart
 
+	getFilteredData: function (panel, dataItems) {
+		if (!dataItems || !dataItems.length) return [];
+		var query = (GoAccess.AppState[panel] && GoAccess.AppState[panel].searchQuery) ? GoAccess.AppState[panel].searchQuery.trim().toLowerCase() : '';
+		if (!query) return dataItems;
+
+		return dataItems.filter(function (item) {
+			var str = String(item.data ?? '').toLowerCase();
+			if (str.includes(query)) return true;
+			if (item.items && item.items.length) {
+				for (var i = 0; i < item.items.length; i++) {
+					if (String(item.items[i].data ?? '').toLowerCase().includes(query)) return true;
+				}
+			}
+			return false;
+		});
+	},
+
+	onSearchInput: function (panel, query) {
+		if (!GoAccess.AppState[panel]) GoAccess.AppState[panel] = {};
+		GoAccess.AppState[panel].searchQuery = query;
+
+		var fullData = (GoAccess.getPanelData(panel) || {}).data || [];
+		var filtered = this.getFilteredData(panel, fullData);
+
+		var $badge = $('.panel-search-badge[data-panel="' + panel + '"]');
+		var $clear = $('.panel-search-clear[data-panel="' + panel + '"]');
+
+		if (query && query.trim().length > 0) {
+			if ($badge) {
+				$badge.textContent = filtered.length + ' / ' + fullData.length;
+				$badge.style.display = 'inline-block';
+			}
+			if ($clear) $clear.style.display = 'inline-block';
+		} else {
+			if ($badge) $badge.style.display = 'none';
+			if ($clear) $clear.style.display = 'none';
+		}
+
+		this.renderTable(panel, 1);
+	},
+
 	events: function () {
 		$$('.panel-next', function (item) {
 			item.onclick = function (e) {
@@ -1815,7 +2431,53 @@ GoAccess.Tables = {
 			item.onclick = function (e) {
 				this.sortColumn(e.currentTarget);
 			}.bind(this);
+			item.onkeydown = function (e) {
+				if (e.key === 'Enter' || e.key === ' ') {
+					if (e.preventDefault) e.preventDefault();
+					this.sortColumn(e.currentTarget);
+				}
+			}.bind(this);
 		}.bind(this));
+
+		$$('.btn-copy', function (item) {
+			item.onclick = function (e) {
+				e.stopPropagation();
+				var val = e.currentTarget.getAttribute('data-clipboard');
+				GoAccess.Util.copyToClipboard(val);
+			};
+		});
+
+		$$('.btn-lookup', function (item) {
+			item.onclick = function (e) {
+				e.stopPropagation();
+			};
+		});
+
+		$$('.panel-search-input', function (item) {
+			item.oninput = function (e) {
+				var panel = e.currentTarget.getAttribute('data-panel');
+				GoAccess.Tables.onSearchInput(panel, e.currentTarget.value);
+			};
+			item.onkeydown = function (e) {
+				if (e.key === 'Escape') {
+					e.currentTarget.value = '';
+					var panel = e.currentTarget.getAttribute('data-panel');
+					GoAccess.Tables.onSearchInput(panel, '');
+					e.currentTarget.blur();
+					e.preventDefault();
+				}
+			};
+		});
+
+		$$('.panel-search-clear', function (item) {
+			item.onclick = function (e) {
+				e.stopPropagation();
+				var panel = e.currentTarget.getAttribute('data-panel');
+				var input = $('.panel-search-input[data-panel="' + panel + '"]');
+				if (input) input.value = '';
+				GoAccess.Tables.onSearchInput(panel, '');
+			};
+		});
 	},
 
 	toggleColumn: function (targ) {
@@ -2095,7 +2757,7 @@ GoAccess.Tables = {
 			var dataItem = dataItems[uiItem.key];
 			// Apply the callback and push return data to output array
 			if (callback && typeof callback == 'function') {
-				var ret = callback.call(this, panel, uiItem, dataItem);
+				var ret = callback.call(this, panel, uiItem, dataItem, dataItems);
 				if (ret) out.push(ret);
 			}
 		}
@@ -2105,13 +2767,39 @@ GoAccess.Tables = {
 	// Return an object that can be consumed by the table template given a user
 	// interface definition and a cell value object.
 	// e.g., value = Object {count: 14351, percent: 5.79}
-	getObjectCell: function (panel, ui, value) {
+	getObjectCell: function (panel, ui, value, rowData) {
 		var className = ui.className || '';
 		className += !['string'].includes(ui.dataType) ? 'text-right' : '';
+
+		var rawCount = GoAccess.Util.getCount(value);
+		var formattedVal = GoAccess.Util.fmtValue(rawCount, ui.dataType, null, null, ui.hlregex, ui.hlvalue, ui.hlidx);
+		var percentStr = GoAccess.Util.getPercent(value);
+		var percentNum = parseFloat(percentStr) || 0;
+
+		var isNumericMetric = ['hits', 'visitors', 'bytes'].includes(ui.key);
+		var rawVal = (rowData && rowData.data !== undefined) ? String(rowData.data) : (typeof value === 'string' ? value : '');
+
+		var isDataCol = (ui.key === 'data');
+		var isHost = (panel === 'hosts' && isDataCol);
+		var isStatusCode = (panel === 'status_codes' && isDataCol);
+		var canCopy = (isDataCol || ui.dataType === 'string') && rawVal.length > 0;
+
+		var query = GoAccess.AppState[panel]?.searchQuery;
+		if (query && query.trim().length > 0 && isDataCol && typeof rawVal === 'string') {
+			var escapedQuery = query.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+			formattedVal = formattedVal.replace(new RegExp('(' + escapedQuery + ')', 'gi'), '<mark class="search-match">$1</mark>');
+		}
+
 		return {
 			'className': className,
-			'percent': GoAccess.Util.getPercent(value),
-			'value': GoAccess.Util.fmtValue(GoAccess.Util.getCount(value), ui.dataType, null, null, ui.hlregex, ui.hlvalue, ui.hlidx)
+			'percent': percentStr,
+			'value': formattedVal,
+			'showBar': isNumericMetric && percentNum > 0,
+			'barPercent': Math.min(100, Math.max(0, percentNum)),
+			'metricKey': ui.key,
+			'rawCopyValue': canCopy ? rawVal : null,
+			'isHost': isHost,
+			'isStatusCode': isStatusCode
 		};
 	},
 
@@ -2140,11 +2828,13 @@ GoAccess.Tables = {
 		subItem = subItem || false;
 		level = level || 0; /* no data rows */
 		if (dataItems.length === 0 && ui.items.length) {
+			var query = (GoAccess.AppState[panel] && GoAccess.AppState[panel].searchQuery) ? GoAccess.AppState[panel].searchQuery : '';
+			var emptyMsg = query ? 'No results matching "' + query + '".' : 'No data on this panel.';
 			rows.push({
 				cells: [{
 					className: 'text-center',
 					colspan: ui.items.length + 1,
-					value: 'No data on this panel.'
+					value: emptyMsg
 				}]
 			});
 			return;
@@ -2156,10 +2846,12 @@ GoAccess.Tables = {
 			var cellcb;
 			if (isString) {
 				cellcb = function() {
-					return {
+					return [{
 						'colspan': ui.items.length,
-						'value': data
-					};
+						'value': data,
+						'showBar': false,
+						'rawCopyValue': data
+					}];
 				};
 			} else {
 				cellcb = this.iterUIItems.bind(this, panel, ui.items, dataItem, this.getObjectCell.bind(this));
@@ -2190,8 +2882,10 @@ GoAccess.Tables = {
 		dataItems = this.getPage(panel, dataItems, page);
 		var rows = [];
 		this.renderRows(rows, panel, ui, dataItems);
-		if (rows.length == 0)
+		if (rows.length == 0) {
+			table.innerHTML = '<tr class="table-empty-row"><td colspan="20" class="text-center text-muted" style="padding: 28px 12px;"><i class="fa fa-search" style="margin-right: 6px; opacity: 0.5;" aria-hidden="true"></i>No data on this panel.</td></tr>';
 			return;
+		}
 
 		table.innerHTML = GoAccess.AppTpls.Tables.data.render({
 			rows: rows
@@ -2200,8 +2894,14 @@ GoAccess.Tables = {
 
 	togglePagination: function (panel, page, dataItems) {
 		GoAccess.Panels.enablePagination(panel);
+		var total = this.getTotalPages(dataItems);
+		this.renderPaginationStatus(panel, page, dataItems, total);
+		if (total <= 1) {
+			GoAccess.Panels.disablePagination(panel);
+			return;
+		}
 		// Disable pagination next button if last page is reached
-		if (page >= this.getTotalPages(dataItems)) {
+		if (page >= total) {
 			GoAccess.Panels.disableNext(panel);
 			GoAccess.Panels.disableLast(panel);
 		}
@@ -2211,14 +2911,33 @@ GoAccess.Tables = {
 		}
 	},
 
+	renderPaginationStatus: function (panel, page, dataItems, total) {
+		var el = document.querySelector('.pagination-status[data-panel="' + panel + '"]');
+		if (!el) return;
+		var perPage = GoAccess.getPrefs().perPage || 7;
+		var count = (dataItems || []).length;
+		page = Math.max(1, Math.min(page || 1, total || 1));
+		if (!count || !total || total <= 1) {
+			el.textContent = '';
+			return;
+		}
+		var start = (page - 1) * perPage + 1;
+		var end = Math.min(page * perPage, count);
+		el.textContent = 'Showing ' + start + '–' + end + ' of ' + count;
+	},
+
 	renderTable: function (panel, page) {
-		var dataItems = GoAccess.getPanelData(panel).data;
+		var fullData = (GoAccess.getPanelData(panel) || {}).data || [];
+		var dataItems = this.getFilteredData(panel, fullData);
 		var ui = GoAccess.getPanelUI(panel);
 
+		var totalPages = this.getTotalPages(dataItems);
 		if (page === "LAST_PAGE") {
-			page = this.getTotalPages(dataItems);
-		} else if (page === "FIRST_PAGE") {
+			page = totalPages;
+		} else if (page === "FIRST_PAGE" || !page || page < 1) {
 			page = 1;
+		} else if (page > totalPages && totalPages > 0) {
+			page = totalPages;
 		}
 
 		this.togglePagination(panel, page, dataItems);
@@ -2241,9 +2960,10 @@ GoAccess.Tables = {
 
 		// render actual data
 		if (data.hasOwnProperty('data')) {
+			var filteredData = this.getFilteredData(panel, data.data);
 			page = this.getCurPage(panel);
-			this.togglePagination(panel, page, data.data);
-			this.renderDataRows(panel, ui, data.data, page);
+			this.togglePagination(panel, page, filteredData);
+			this.renderDataRows(panel, ui, filteredData, page);
 		}
 
 		// render meta data
@@ -2297,6 +3017,62 @@ GoAccess.Tables = {
 			$thead.innerHTML = GoAccess.AppTpls.Tables.head.render(ui);
 			$colgroup.innerHTML = GoAccess.AppTpls.Tables.colgroup.render(ui);
 		}
+	},
+
+	downloadCSV: function (panel) {
+		var fullData = (GoAccess.getPanelData(panel) || {}).data || [];
+		var ui = GoAccess.getPanelUI(panel);
+		if (!fullData.length || !ui) return;
+
+		var headers = [];
+		var keys = [];
+		ui.items.forEach(function(it) {
+			if (!it.hide) {
+				headers.push('"' + it.label.replace(/"/g, '""') + '"');
+				keys.push(it.key);
+			}
+		});
+
+		var csvRows = [headers.join(',')];
+		fullData.forEach(function(row) {
+			var line = [];
+			keys.forEach(function(k) {
+				var val = row[k];
+				if (typeof val === 'object' && val !== null) val = val.count;
+				if (val === undefined || val === null) val = '';
+				line.push('"' + String(val).replace(/"/g, '""') + '"');
+			});
+			csvRows.push(line.join(','));
+		});
+
+		var blob = new Blob([csvRows.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+		var url = URL.createObjectURL(blob);
+		var a = document.createElement('a');
+		a.href = url;
+		a.download = 'goaccess-' + panel + '-' + (+new Date()) + '.csv';
+		document.body.appendChild(a);
+		a.click();
+		document.body.removeChild(a);
+		URL.revokeObjectURL(url);
+		GoAccess.Toast.show('Exported CSV for ' + ui.head, 'success', 2000);
+	},
+
+	downloadPanelJSON: function (panel) {
+		var data = GoAccess.getPanelData(panel);
+		var ui = GoAccess.getPanelUI(panel);
+		if (!data) return;
+
+		var jsonStr = JSON.stringify(data, null, 2);
+		var blob = new Blob([jsonStr], { type: 'application/json;charset=utf-8;' });
+		var url = URL.createObjectURL(blob);
+		var a = document.createElement('a');
+		a.href = url;
+		a.download = 'goaccess-' + panel + '-' + (+new Date()) + '.json';
+		document.body.appendChild(a);
+		a.click();
+		document.body.removeChild(a);
+		URL.revokeObjectURL(url);
+		GoAccess.Toast.show('Exported JSON for ' + (ui ? ui.head : panel), 'success', 2000);
 	},
 
 	reloadTables: function () {
@@ -2411,15 +3187,18 @@ GoAccess.App = {
 	},
 
 	initDom: function () {
-		$('nav').classList.remove('hide');
-		$('.container').classList.remove('hide');
-		$('.spinner').classList.add('hide');
-		$('.app-loading-status > small').style.display = 'none';
+		var nav = $('nav');
+		nav && nav.classList.remove('hide');
+		var container = $('.container') || $('.container-fluid');
+		container && container.classList.remove('hide');
+		var spinner = $('.spinner');
+		spinner && spinner.classList.add('hide');
+		var loading = $('.app-loading-status > small');
+		loading && (loading.style.display = 'none');
 
-		if (GoAccess.AppPrefs['layout'] == 'horizontal' || GoAccess.AppPrefs['layout'] == 'wide') {
-			$('.container').classList.add('container-fluid');
-			$('.container-fluid').classList.remove('container');
-		}
+		var layout = GoAccess.AppPrefs['layout'] || 'horizontal';
+		document.body.classList.remove('layout-horizontal', 'layout-wide', 'layout-vertical');
+		document.body.classList.add('layout-' + layout);
 	},
 
 	renderData: function () {
@@ -2458,7 +3237,92 @@ GoAccess.App = {
 		this.setTpls();
 		this.initDom();
 		this.renderPanels();
+		GoAccess.Shortcuts.initialize();
 	},
+};
+
+// KEYBOARD SHORTCUTS
+GoAccess.Shortcuts = {
+	initialize: function () {
+		document.addEventListener('keydown', function (e) {
+			var target = e.target;
+			var isInput = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable);
+
+			if (e.key === 'Escape') {
+				// If search input focused, blur and clear
+				if (isInput && target.classList.contains('panel-search-input')) {
+					var p = target.getAttribute('data-panel');
+					if (target.value) {
+						target.value = '';
+						GoAccess.Tables.onSearchInput(p, '');
+					}
+					target.blur();
+					e.preventDefault();
+					return;
+				}
+				// Close focus mode if open
+				if (document.body.classList.contains('has-panel-focused')) {
+					$$('article.panel-focused', function (el) {
+						var panel = el.querySelector('[data-panel]')?.getAttribute('data-panel');
+						if (panel) GoAccess.Panels.toggleFocus(panel);
+					});
+					e.preventDefault();
+					return;
+				}
+				// Close shortcuts modal if open
+				var modal = $('#shortcuts-modal');
+				if (modal && modal.style.display !== 'none') {
+					modal.style.display = 'none';
+					e.preventDefault();
+					return;
+				}
+				return;
+			}
+
+			if (isInput) return;
+
+			// Global hotkeys when not in an input
+			if (e.key === '/' || e.key === 'f') {
+				e.preventDefault();
+				// Focus search on first visible panel
+				var visibleInput = document.querySelector('article .panel-search-input');
+				if (visibleInput) {
+					visibleInput.focus();
+					visibleInput.select();
+				}
+			} else if (e.key === 't') {
+				e.preventDefault();
+				var curTheme = GoAccess.AppPrefs.theme || 'darkGray';
+				var newTheme = (curTheme === 'bright') ? 'darkGray' : 'bright';
+				GoAccess.Nav.setTheme(newTheme);
+				GoAccess.Toast.show('Theme: ' + newTheme, 'info', 1500);
+			} else if (e.key === '?' || (e.shiftKey && e.key === '/')) {
+				e.preventDefault();
+				var modal = $('#shortcuts-modal');
+				if (modal) {
+					modal.style.display = (modal.style.display === 'none') ? 'flex' : 'none';
+				}
+			} else if (e.key >= '1' && e.key <= '9') {
+				var panels = Object.keys(GoAccess.getPanelUI());
+				var idx = parseInt(e.key, 10) - 1;
+				if (idx < panels.length) {
+					var targetPanel = $('#panel-' + panels[idx]);
+					if (targetPanel) {
+						targetPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+						GoAccess.Toast.show('Jumped to ' + (GoAccess.getPanelUI(panels[idx])?.head || panels[idx]), 'info', 1200);
+					}
+				}
+			}
+		});
+
+		// Modal close button
+		$('#shortcuts-modal .shortcuts-close')?.addEventListener('click', function () {
+			$('#shortcuts-modal').style.display = 'none';
+		});
+		$('#shortcuts-modal')?.addEventListener('click', function (e) {
+			if (e.target === this) this.style.display = 'none';
+		});
+	}
 };
 
 // Adds the visibilitychange EventListener

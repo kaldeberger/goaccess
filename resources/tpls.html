@@ -1,18 +1,27 @@
 <!-- TPL General  -->
 <script id="tpl-general" type="text/template">
-    <hgroup>
-      <h2 class="gheader h4" id="overall-heading">{{head}}</h2>
-      <p>{{#from}}{{from}}{{/from}}{{#to}} – {{to}}{{/to}}</p>
-    </hgroup>
-	<ul role="list" class="row"></ul>
+    <div class="overall-header">
+      <h2 class="gheader" id="overall-heading"><i class="fa fa-dashboard" aria-hidden="true"></i> {{head}}</h2>
+      <span class="overall-date-range text-muted">{{#from}}{{from}}{{/from}}{{^from}}<span class="overall-date-empty">No dated requests in this report</span>{{/from}}{{#to}} &ndash; {{to}}{{/to}}</span>
+    </div>
+    <p class="overall-meta text-muted" aria-live="polite">{{#meta}}{{{meta}}}{{/meta}}</p>
+    {{#coverage}}<p class="overall-coverage text-muted" role="note">{{{coverage}}}</p>{{/coverage}}
+    <div class="key-insights" aria-label="Key insights">
+      <h3 class="key-insights-title">Key insights</h3>
+      <ul role="list" class="key-insights-grid">{{#insights}}<li class="insight-card insight-{{tone}}"><span class="insight-label">{{label}}</span><span class="insight-value">{{{value}}}</span>{{#sub}}<span class="insight-sub">{{{sub}}}</span>{{/sub}}</li>{{/insights}}{{^insights}}<li class="insight-card insight-muted"><span class="insight-label">No insights</span><span class="insight-value">Not enough data in this report</span></li>{{/insights}}</ul>
+    </div>
+	<ul role="list" class="overall-stats-grid"></ul>
 </script>
 
 <!-- TPL General Items -->
 <script id="tpl-general-items" type="text/template">
-  <li class="col-sm-6 col-md-2 {{#className}}{{className}}{{/className}}{{^className}}gray{{/className}}" aria-live="polite" aria-atomic="true">
-    <div>
-      <span><i class="fa fa-bar-chart"></i> {{#label}}{{label}}{{/label}}</span>
-      <span id="{{id}}">{{value}}</span>
+  <li class="overall-stat-card {{#className}}{{className}}{{/className}}" aria-live="polite" aria-atomic="true">
+    <div class="stat-card-inner">
+      <div class="stat-label">
+        <i class="fa fa-{{icon}} stat-icon" aria-hidden="true"></i>
+        <span>{{#label}}{{label}}{{/label}}</span>
+      </div>
+      <div class="stat-value" id="{{id}}">{{value}}</div>
     </div>
   </li>
 </script>
@@ -39,7 +48,37 @@
 			</td>
 			{{#cells}}
 				<td class="{{className}}" {{#colspan}}colspan="{{colspan}}"{{/colspan}}>
-					<span class="value">{{{value}}}</span>{{#percent}}<span class="percent"> ({{percent}})</span>{{/percent}}
+					{{#showBar}}
+					<div class="metric-cell">
+						<div class="metric-progress-track" title="{{barPercent}}%">
+							<div class="metric-progress-bar metric-bar-{{metricKey}}" style="width: {{barPercent}}%;"></div>
+						</div>
+						<span class="metric-value">{{{value}}}</span>
+						{{#percent}}<span class="metric-percent">({{percent}})</span>{{/percent}}
+					</div>
+					{{/showBar}}
+					{{^showBar}}
+					<div class="cell-content-wrap">
+						<span class="value">{{{value}}}</span>{{#percent}}<span class="metric-percent"> ({{percent}})</span>{{/percent}}
+						{{#rawCopyValue}}
+						<div class="cell-actions">
+							<button type="button" class="btn-cell-action btn-copy" data-clipboard="{{rawCopyValue}}" title="Copy to clipboard" aria-label="Copy to clipboard">
+								<i class="fa fa-clone" aria-hidden="true"></i>
+							</button>
+							{{#isHost}}
+							<a class="btn-cell-action btn-lookup" href="https://ipinfo.io/{{rawCopyValue}}" target="_blank" rel="noopener noreferrer" title="Lookup IP on IPinfo" aria-label="Lookup IP on IPinfo">
+								<i class="fa fa-external-link" aria-hidden="true"></i>
+							</a>
+							{{/isHost}}
+							{{#isStatusCode}}
+							<a class="btn-cell-action btn-lookup" href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/{{rawCopyValue}}" target="_blank" rel="noopener noreferrer" title="HTTP status docs" aria-label="HTTP status docs">
+								<i class="fa fa-external-link" aria-hidden="true"></i>
+							</a>
+							{{/isStatusCode}}
+						</div>
+						{{/rawCopyValue}}
+					</div>
+					{{/showBar}}
 				</td>
 			{{/cells}}
 		</tr>
@@ -87,39 +126,44 @@
 <!-- TPL Table thead -->
 <script id="tpl-table-thead" type="text/template">
 	{{#hasSubItems}}
-		<th></th>
+		<th scope="col"><span class="sr-only">Expand</span></th>
 	{{/hasSubItems}}
-		<th>#</th>
+		<th scope="col">#</th>
 	{{#items}}
-		<th class="{{dataType}} {{#key}}sortable{{/key}}" data-key="{{key}}" {{#sort}}data-order="{{#asc}}asc{{/asc}}{{^asc}}desc{{/asc}}"{{/sort}}>
-			{{label}} <i class="fa fa-{{^sort}}sort{{/sort}}{{#sort}}{{#asc}}caret-up{{/asc}}{{^asc}}caret-down{{/asc}}{{/sort}}"></i>
+		<th scope="col" class="{{dataType}} {{#key}}sortable{{/key}} {{#sort}}sorted-col{{/sort}}" data-key="{{key}}" {{#key}}tabindex="0" role="columnheader" aria-sort="{{#sort}}{{#asc}}ascending{{/asc}}{{^asc}}descending{{/asc}}{{/sort}}{{^sort}}none{{/sort}}"{{/key}} {{#sort}}data-order="{{#asc}}asc{{/asc}}{{^asc}}desc{{/asc}}"{{/sort}}>
+			{{label}} <i class="fa fa-{{^sort}}sort{{/sort}}{{#sort}}{{#asc}}caret-up{{/asc}}{{^asc}}caret-down{{/asc}}{{/sort}}" aria-hidden="true"></i>
 		</th>
 	{{/items}}
 </script>
 
 <!-- TPL Panel Options DropDown -->
 <script id="tpl-panel-opts" type="text/template">
-	<li class="dropdown-header">{{ labels.chart_opts }}</li>
-	<li><a href="javascript:void(0);" data-panel="{{id}}" data-chart="{{showChart}}"><i class="fa fa-{{#showChart}}check-{{/showChart}}square-o"></i> {{labels.chart}}</a></li>
+	<li class="dropdown-header" role="presentation">{{ labels.chart_opts }}</li>
+	<li role="presentation"><a href="javascript:void(0);" role="menuitemcheckbox" aria-checked="{{#showChart}}true{{/showChart}}{{^showChart}}false{{/showChart}}" data-panel="{{id}}" data-chart="{{showChart}}"><i class="fa fa-{{#showChart}}check-{{/showChart}}square-o"></i> {{labels.chart}}</a></li>
 
 	{{#plot.length}}
-	<li class="dropdown-header">{{ labels.type }}</li>
-	<li><a href="javascript:void(0);" data-panel="{{id}}" data-chart-type="area-spline"><i class="fa fa-circle{{^area-spline}}-o{{/area-spline}}"></i> {{labels.area_spline}}</a></li>
-	<li><a href="javascript:void(0);" data-panel="{{id}}" data-chart-type="bar"><i class="fa fa-circle{{^bar}}-o{{/bar}}"></i> {{labels.bar}}</a></li>
+	<li class="dropdown-header" role="presentation">{{ labels.type }}</li>
+	<li role="presentation"><a href="javascript:void(0);" role="menuitemradio" aria-checked="{{#area-spline}}true{{/area-spline}}{{^area-spline}}false{{/area-spline}}" data-panel="{{id}}" data-chart-type="area-spline"><i class="fa fa-circle{{^area-spline}}-o{{/area-spline}}"></i> {{labels.area_spline}}</a></li>
+	<li role="presentation"><a href="javascript:void(0);" role="menuitemradio" aria-checked="{{#bar}}true{{/bar}}{{^bar}}false{{/bar}}" data-panel="{{id}}" data-chart-type="bar"><i class="fa fa-circle{{^bar}}-o{{/bar}}"></i> {{labels.bar}}</a></li>
 	{{#hasMap}}
-	<li><a href="javascript:void(0);" data-panel="{{id}}" data-chart-type="wmap"><i class="fa fa-circle{{^wmap}}-o{{/wmap}}"></i> {{labels.wmap}}</a></li>
-	<li><a href="javascript:void(0);" data-panel="{{id}}" data-chart-type="gmap"><i class="fa fa-circle{{^gmap}}-o{{/gmap}}"></i> {{labels.gmap}}</a></li>
+	<li role="presentation"><a href="javascript:void(0);" role="menuitemradio" aria-checked="{{#wmap}}true{{/wmap}}{{^wmap}}false{{/wmap}}" data-panel="{{id}}" data-chart-type="wmap"><i class="fa fa-circle{{^wmap}}-o{{/wmap}}"></i> {{labels.wmap}}</a></li>
+	<li role="presentation"><a href="javascript:void(0);" role="menuitemradio" aria-checked="{{#gmap}}true{{/gmap}}{{^gmap}}false{{/gmap}}" data-panel="{{id}}" data-chart-type="gmap"><i class="fa fa-circle{{^gmap}}-o{{/gmap}}"></i> {{labels.gmap}}</a></li>
 	{{/hasMap}}
-	<li class="dropdown-header">{{labels.plot_metric}}</li>
+	<li class="dropdown-header" role="presentation">{{labels.plot_metric}}</li>
 	{{#plot}}
-	<li><a href="javascript:void(0);" data-panel="{{id}}" data-plot="{{className}}" class="panel-plot-{{className}}"><i class="fa fa-circle{{^selected}}-o{{/selected}}"></i> {{label}}</a></li>
+	<li role="presentation"><a href="javascript:void(0);" role="menuitemradio" aria-checked="{{#selected}}true{{/selected}}{{^selected}}false{{/selected}}" data-panel="{{id}}" data-plot="{{className}}" class="panel-plot-{{className}}"><i class="fa fa-circle{{^selected}}-o{{/selected}}"></i> {{label}}</a></li>
 	{{/plot}}
 	{{/plot.length}}
 
-	<li class="dropdown-header">{{labels.table_columns}}</li>
+	<li class="dropdown-header" role="presentation">{{labels.table_columns}}</li>
 	{{#items}}
-	<li><a href="javascript:void(0);" data-panel="{{id}}" data-metric="{{key}}"><i class="fa fa-{{^hide}}check-{{/hide}}square-o"></i> {{label}}</a></li>
+	<li role="presentation"><a href="javascript:void(0);" role="menuitemcheckbox" aria-checked="{{#hide}}false{{/hide}}{{^hide}}true{{/hide}}" data-panel="{{id}}" data-metric="{{key}}"><i class="fa fa-{{^hide}}check-{{/hide}}square-o"></i> {{label}}</a></li>
 	{{/items}}
+
+	<li class="divider" role="separator"></li>
+	<li class="dropdown-header" role="presentation">Export</li>
+	<li role="presentation"><a href="javascript:void(0);" role="menuitem" data-panel="{{id}}" class="panel-export-csv"><i class="fa fa-file-text-o"></i> Export Table (CSV)</a></li>
+	<li role="presentation"><a href="javascript:void(0);" role="menuitem" data-panel="{{id}}" class="panel-export-json"><i class="fa fa-code"></i> Export Panel (JSON)</a></li>
 </script>
 
 <!-- TPL Table colgroup -->
@@ -135,40 +179,43 @@
 
 <!-- TPL Panel -->
 <script id="tpl-panel" type="text/template">
-	<div class="row">
-		<div class="col-md-12">
-			<header>
-				<hgroup>
-				  <h2 id="{{id}}" class="gheader">{{head}}</h2>
-				  <small class="text-muted">{{desc}}</small>
-				</hgroup>
-				<div>
-					<div class="dropdown">
-						<button class="btn btn-default btn-sm dropdown-toggle" type="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false" data-panel="{{id}}" aria-label="{{labels.panel_opts}}, {{head}}">
-							<i class="fa fa-gear" aria-hidden="true"></i> {{labels.panel_opts}} <span class="fa fa-caret-down" aria-hidden="true"></span>
-						</button>
-						<ul class="dropdown-menu dropdown-menu-right panel-opts-{{id}}">
-						</ul>
-					</div>
+	<div class="panel-card-inner">
+		<header class="panel-header">
+			<hgroup>
+			  <h2 id="{{id}}" class="gheader">{{head}}</h2>
+			  <small class="text-muted">{{desc}}</small>
+			</hgroup>
+			<div class="panel-controls">
+				<div class="panel-search-box" data-panel="{{id}}">
+					<i class="fa fa-search panel-search-icon" aria-hidden="true"></i>
+					<input type="text" class="panel-search-input" data-panel="{{id}}" placeholder="Filter {{head}}..." aria-label="Filter {{head}}">
+					<span class="panel-search-badge" data-panel="{{id}}" style="display: none;" role="status" aria-live="polite"></span>
+					<button type="button" class="panel-search-clear" data-panel="{{id}}" style="display: none;" aria-label="Clear filter">&times;</button>
 				</div>
-			</header>
-		</div>
-	</div>
-	{{#chart}}
-	<div class="row">
-		<div class="col-md-12">
+				<button class="btn btn-default btn-sm panel-focus-btn" type="button" data-panel="{{id}}" title="Toggle Fullscreen Focus" aria-label="Toggle Fullscreen Focus">
+					<i class="fa fa-arrows-alt" aria-hidden="true"></i>
+				</button>
+				<div class="dropdown">
+					<button class="btn btn-default btn-sm dropdown-toggle" type="button" data-toggle="dropdown" aria-haspopup="menu" aria-expanded="false" aria-controls="panel-menu-{{id}}" data-panel="{{id}}" aria-label="{{labels.panel_opts}}, {{head}}">
+						<i class="fa fa-gear" aria-hidden="true"></i> <span class="hidden-xs">{{labels.panel_opts}}</span> <span class="fa fa-caret-down" aria-hidden="true"></span>
+					</button>
+					<ul class="dropdown-menu dropdown-menu-right panel-opts-{{id}}" id="panel-menu-{{id}}" role="menu" aria-label="{{labels.panel_opts}}, {{head}}">
+					</ul>
+				</div>
+			</div>
+		</header>
+		{{#chart}}
+		<div class="panel-chart-row">
 			<div id="chart-{{id}}" class="chart-wrap"></div>
 		</div>
-	</div>
-	{{/chart}}
-	{{#table}}
-	<div class="row clearfix table-wrapper {{#autoHideTables}}hidden-xs{{/autoHideTables}}">
-		<div class="col-md-12">
+		{{/chart}}
+		{{#table}}
+		<div class="table-wrapper {{#autoHideTables}}hidden-xs{{/autoHideTables}}">
 			<div class="table-responsive">
 				<table data-panel="{{id}}" class="table table-borderless table-hover table-{{id}}">
 					<colgroup>
 					</colgroup>
-					<thead >
+					<thead>
 						<tr class="thead-cols"></tr>
 						<tr class="thead-min"></tr>
 						<tr class="thead-max"></tr>
@@ -183,37 +230,40 @@
 				</table>
 			</div>
 
-			<ul class="pagination pagination-sm pull-left">
-				<li class="disabled">
-					<a class="panel-first" href="javascript:void(0);" aria-label="{{labels.first}}" data-panel="{{id}}" title="{{labels.first}}">
-						<i class="fa fa-angle-double-left"></i>
-					</a>
-				</li>
-				<li class="disabled">
-					<a class="panel-prev" href="javascript:void(0);" aria-label="{{labels.previous}}" data-panel="{{id}}" title="{{labels.previous}}">
-						<i class="fa fa-angle-left"></i>
-					</a>
-				</li>
-				<li>
-					<a class="panel-next" href="javascript:void(0);" aria-label="{{labels.next}}" data-panel="{{id}}" title="{{labels.next}}">
-						<i class="fa fa-angle-right"></i>
-					</a>
-				</li>
-				<li>
-					<a class="panel-last" href="javascript:void(0);" aria-label="{{labels.last}}" data-panel="{{id}}" title="{{labels.last}}">
-						<i class="fa fa-angle-double-right"></i>
-					</a>
-				</li>
-			</ul>
+			<div class="panel-footer-controls">
+				<span class="pagination-status text-muted" data-panel="{{id}}" aria-live="polite"></span>
+				<ul class="pagination pagination-sm">
+					<li class="disabled">
+						<a class="panel-first" href="javascript:void(0);" aria-label="{{labels.first}}" aria-disabled="true" data-panel="{{id}}" title="{{labels.first}}">
+							<i class="fa fa-angle-double-left" aria-hidden="true"></i>
+						</a>
+					</li>
+					<li class="disabled">
+						<a class="panel-prev" href="javascript:void(0);" aria-label="{{labels.previous}}" aria-disabled="true" data-panel="{{id}}" title="{{labels.previous}}">
+							<i class="fa fa-angle-left" aria-hidden="true"></i>
+						</a>
+					</li>
+					<li>
+						<a class="panel-next" href="javascript:void(0);" aria-label="{{labels.next}}" aria-disabled="false" data-panel="{{id}}" title="{{labels.next}}">
+							<i class="fa fa-angle-right" aria-hidden="true"></i>
+						</a>
+					</li>
+					<li>
+						<a class="panel-last" href="javascript:void(0);" aria-label="{{labels.last}}" aria-disabled="false" data-panel="{{id}}" title="{{labels.last}}">
+							<i class="fa fa-angle-double-right" aria-hidden="true"></i>
+						</a>
+					</li>
+				</ul>
+			</div>
 		</div>
+		{{/table}}
 	</div>
-	{{/table}}
 </script>
 
 <!-- TPL Nav Bar wrapper -->
 <script id="tpl-nav-wrap" type="text/template">
-	<button type="button"class="nav-bars" aria-label="{{ button_menu }}"><i class="fa fa-bars" aria-hidden="true"></i></button>
-	<button type="button"class="nav-gears" aria-label="{{ button_settings }}"><i class="fa fa-cog" aria-hidden="true"></i></button>
+	<button type="button" class="nav-bars" aria-label="{{ button_menu }}"><i class="fa fa-bars" aria-hidden="true"></i></button>
+	<button type="button" class="nav-gears" aria-label="{{ button_settings }}"><i class="fa fa-cog" aria-hidden="true"></i></button>
 	<i class="nav-ws-status fa fa-stop" aria-live="polite" aria-label="{{ websocket_disconnected }}" title="{{ websocket_disconnected }}"></i>
 	<div class="nav-list"></div>
 	<div class="powered hidden-xs hidden-sm">by <a href="https://goaccess.io/">GoAccess</a> <span>v{{version}}</span> and <a href="https://gwsocket.io/">GWSocket</a></div>
@@ -221,7 +271,10 @@
 
 <!-- TPL Nav Bar items -->
 <script id="tpl-nav-menu" type="text/template">
-	<h3>{{labels.panels}}</h3>
+	<div class="nav-drawer-header">
+		<h3><i class="fa fa-bars"></i> {{labels.panels}}</h3>
+		<button type="button" class="nav-close-btn" aria-label="Close menu" title="Close (Esc)"><i class="fa fa-times"></i></button>
+	</div>
 	<ul>
 		<!-- Overall stats - not draggable -->
 		<li {{#overall_current}}class="active"{{/overall_current}}>
@@ -247,6 +300,10 @@
 
 <!-- TPL Nav Bar options -->
 <script id="tpl-nav-opts" type="text/template">
+	<div class="nav-drawer-header">
+		<h3><i class="fa fa-cog"></i> Settings</h3>
+		<button type="button" class="nav-close-btn" aria-label="Close settings" title="Close (Esc)"><i class="fa fa-times"></i></button>
+	</div>
 	<h3><i class="fa fa-hashtag"></i> {{labels.theme}}</h3>
 	<ul>
 		<li {{#darkGray}}class="active"{{/darkGray}}>
@@ -316,21 +373,39 @@
 
 <!-- TPL Chart tooltip -->
 <script id="tpl-chart-tooltip" type="text/template">
-	<table class="chart-tooltip">
-		<tbody>
-			<tr>
-				<th colspan="2">{{data.0}}</th>
-			</tr>
-			<tr>
-				<td class="name"><span class="blue"></span>hits</td>
-				<td class="value">{{data.1}}</td>
-			</tr>
-			{{#data.2}}
-			<tr>
-				<td class="name"><span class="red"></span>visitors</td>
-				<td class="value">{{data.2}}</td>
-			</tr>
-			{{/data.2}}
-		</tbody>
-	</table>
+	<div class="chart-tooltip-card">
+		<div class="tooltip-title">{{data.0}}</div>
+		<div class="tooltip-row">
+			<span class="tooltip-label"><span class="tooltip-dot blue"></span>Hits</span>
+			<span class="tooltip-val">{{data.1}}</span>
+		</div>
+		{{#data.2}}
+		<div class="tooltip-row">
+			<span class="tooltip-label"><span class="tooltip-dot red"></span>Visitors</span>
+			<span class="tooltip-val">{{data.2}}</span>
+		</div>
+		{{/data.2}}
+	</div>
 </script>
+
+<!-- Toast Container -->
+<div id="toast-container" class="toast-container" aria-live="polite" aria-atomic="true"></div>
+
+<!-- Keyboard Shortcuts Modal -->
+<div id="shortcuts-modal" class="shortcuts-modal-overlay" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="shortcuts-title">
+	<div class="shortcuts-modal-card">
+		<div class="shortcuts-header">
+			<h3 id="shortcuts-title"><i class="fa fa-keyboard-o" aria-hidden="true"></i> Keyboard Shortcuts</h3>
+			<button type="button" class="shortcuts-close" aria-label="Close shortcuts dialog">&times;</button>
+		</div>
+		<div class="shortcuts-body">
+			<div class="shortcut-row"><kbd>/</kbd> <span>Focus in-table filter search</span></div>
+			<div class="shortcut-row"><kbd>Esc</kbd> <span>Clear search / Exit focus mode / Close modal</span></div>
+			<div class="shortcut-row"><kbd>t</kbd> <span>Toggle Dark / Light theme</span></div>
+			<div class="shortcut-row"><kbd>1</kbd> - <kbd>9</kbd> <span>Jump directly to panels 1 to 9</span></div>
+			<div class="shortcut-row"><kbd>?</kbd> <span>Toggle keyboard shortcuts reference</span></div>
+		</div>
+	</div>
+</div>
+
+
