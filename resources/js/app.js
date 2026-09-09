@@ -1131,19 +1131,19 @@ GoAccess.Nav = {
 			}.bind(this);
 		}.bind(this));
 
-		$$('.layout-horizontal', function (item) {
+		$$('a.layout-horizontal', function (item) {
 			item.onclick = function (e) {
 				this.setLayout('horizontal');
 			}.bind(this);
 		}.bind(this));
 
-		$$('.layout-vertical', function (item) {
+		$$('a.layout-vertical', function (item) {
 			item.onclick = function (e) {
 				this.setLayout('vertical');
 			}.bind(this);
 		}.bind(this));
 
-		$$('.layout-wide', function (item) {
+		$$('a.layout-wide', function (item) {
 			item.onclick = function (e) {
 				this.setLayout('wide');
 			}.bind(this);
